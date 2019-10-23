@@ -1,0 +1,2759 @@
+<svg height="1574" onload="init(evt)" version="1.1" viewbox="0 0 1200 1574" width="1200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+<lineargradient id="background" x1="0" x2="0" y1="0" y2="1">
+<stop offset="5%" stop-color="#eeeeee"></stop>
+<stop offset="95%" stop-color="#eeeeb0"></stop>
+</lineargradient>
+</defs>
+<style type="text/css">
+ text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+ #search { opacity:0.1; cursor:pointer; }
+ #search:hover, #search.show { opacity:1; }
+ #subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+ #title { text-anchor:middle; font-size:17px}
+ #unzoom { cursor:pointer; }
+ #frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+ .hide { display:none; }
+ .parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+ "use strict";
+ var details, searchbtn, unzoombtn, matchedtxt, svg, searching;
+ function init(evt) {
+  details = document.getElementById("details").firstChild;
+  searchbtn = document.getElementById("search");
+  unzoombtn = document.getElementById("unzoom");
+  matchedtxt = document.getElementById("matched");
+  svg = document.getElementsByTagName("svg")[0];
+  searching = 0;
+ }
+
+ window.addEventListener("click", function(e) {
+  var target = find_group(e.target);
+  if (target) {
+   if (target.nodeName == "a") {
+    if (e.ctrlKey === false) return;
+    e.preventDefault();
+   }
+   if (target.classList.contains("parent")) unzoom();
+   zoom(target);
+  }
+  else if (e.target.id == "unzoom") unzoom();
+  else if (e.target.id == "search") search_prompt();
+ }, false)
+
+ // mouse-over for info
+ // show
+ window.addEventListener("mouseover", function(e) {
+  var target = find_group(e.target);
+  if (target) details.nodeValue = "Function: " + g_to_text(target);
+ }, false)
+
+ // clear
+ window.addEventListener("mouseout", function(e) {
+  var target = find_group(e.target);
+  if (target) details.nodeValue = ' ';
+ }, false)
+
+ // ctrl-F for search
+ window.addEventListener("keydown",function (e) {
+  if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+   e.preventDefault();
+   search_prompt();
+  }
+ }, false)
+
+ // functions
+ function find_child(node, selector) {
+  var children = node.querySelectorAll(selector);
+  if (children.length) return children[0];
+  return;
+ }
+ function find_group(node) {
+  var parent = node.parentElement;
+  if (!parent) return;
+  if (parent.id == "frames") return node;
+  return find_group(parent);
+ }
+ function orig_save(e, attr, val) {
+  if (e.attributes["_orig_" + attr] != undefined) return;
+  if (e.attributes[attr] == undefined) return;
+  if (val == undefined) val = e.attributes[attr].value;
+  e.setAttribute("_orig_" + attr, val);
+ }
+ function orig_load(e, attr) {
+  if (e.attributes["_orig_"+attr] == undefined) return;
+  e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+  e.removeAttribute("_orig_"+attr);
+ }
+ function g_to_text(e) {
+  var text = find_child(e, "title").firstChild.nodeValue;
+  return (text)
+ }
+ function g_to_func(e) {
+  var func = g_to_text(e);
+  // if there's any manipulation we want to do to the function
+  // name before it's searched, do it here before returning.
+  return (func);
+ }
+ function update_text(e) {
+  var r = find_child(e, "rect");
+  var t = find_child(e, "text");
+  var w = parseFloat(r.attributes.width.value) -3;
+  var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+  t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+  // Smaller than this size won't fit anything
+  if (w < 2 * 12 * 0.59) {
+   t.textContent = "";
+   return;
+  }
+
+  t.textContent = txt;
+  // Fit in full text width
+  if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+   return;
+
+  for (var x = txt.length - 2; x > 0; x--) {
+   if (t.getSubStringLength(0, x + 2) <= w) {
+    t.textContent = txt.substring(0, x) + "..";
+    return;
+   }
+  }
+  t.textContent = "";
+ }
+
+ // zoom
+ function zoom_reset(e) {
+  if (e.attributes != undefined) {
+   orig_load(e, "x");
+   orig_load(e, "width");
+  }
+  if (e.childNodes == undefined) return;
+  for (var i = 0, c = e.childNodes; i < c.length; i++) {
+   zoom_reset(c[i]);
+  }
+ }
+ function zoom_child(e, x, ratio) {
+  if (e.attributes != undefined) {
+   if (e.attributes.x != undefined) {
+    orig_save(e, "x");
+    e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+    if (e.tagName == "text")
+     e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+   }
+   if (e.attributes.width != undefined) {
+    orig_save(e, "width");
+    e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+   }
+  }
+
+  if (e.childNodes == undefined) return;
+  for (var i = 0, c = e.childNodes; i < c.length; i++) {
+   zoom_child(c[i], x - 10, ratio);
+  }
+ }
+ function zoom_parent(e) {
+  if (e.attributes) {
+   if (e.attributes.x != undefined) {
+    orig_save(e, "x");
+    e.attributes.x.value = 10;
+   }
+   if (e.attributes.width != undefined) {
+    orig_save(e, "width");
+    e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+   }
+  }
+  if (e.childNodes == undefined) return;
+  for (var i = 0, c = e.childNodes; i < c.length; i++) {
+   zoom_parent(c[i]);
+  }
+ }
+ function zoom(node) {
+  var attr = find_child(node, "rect").attributes;
+  var width = parseFloat(attr.width.value);
+  var xmin = parseFloat(attr.x.value);
+  var xmax = parseFloat(xmin + width);
+  var ymin = parseFloat(attr.y.value);
+  var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+  // XXX: Workaround for JavaScript float issues (fix me)
+  var fudge = 0.0001;
+
+  unzoombtn.classList.remove("hide");
+
+  var el = document.getElementById("frames").children;
+  for (var i = 0; i < el.length; i++) {
+   var e = el[i];
+   var a = find_child(e, "rect").attributes;
+   var ex = parseFloat(a.x.value);
+   var ew = parseFloat(a.width.value);
+   var upstack;
+   // Is it an ancestor
+   if (0 == 0) {
+    upstack = parseFloat(a.y.value) > ymin;
+   } else {
+    upstack = parseFloat(a.y.value) < ymin;
+   }
+   if (upstack) {
+    // Direct ancestor
+    if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+     e.classList.add("parent");
+     zoom_parent(e);
+     update_text(e);
+    }
+    // not in current path
+    else
+     e.classList.add("hide");
+   }
+   // Children maybe
+   else {
+    // no common path
+    if (ex < xmin || ex + fudge >= xmax) {
+     e.classList.add("hide");
+    }
+    else {
+     zoom_child(e, xmin, ratio);
+     update_text(e);
+    }
+   }
+  }
+ }
+ function unzoom() {
+  unzoombtn.classList.add("hide");
+  var el = document.getElementById("frames").children;
+  for(var i = 0; i < el.length; i++) {
+   el[i].classList.remove("parent");
+   el[i].classList.remove("hide");
+   zoom_reset(el[i]);
+   update_text(el[i]);
+  }
+ }
+
+ // search
+ function reset_search() {
+  var el = document.querySelectorAll("#frames rect");
+  for (var i = 0; i < el.length; i++) {
+   orig_load(el[i], "fill")
+  }
+ }
+ function search_prompt() {
+  if (!searching) {
+   var term = prompt("Enter a search term (regexp " +
+       "allowed, eg: ^ext4_)", "");
+   if (term != null) {
+    search(term)
+   }
+  } else {
+   reset_search();
+   searching = 0;
+   searchbtn.classList.remove("show");
+   searchbtn.firstChild.nodeValue = "Search"
+   matchedtxt.classList.add("hide");
+   matchedtxt.firstChild.nodeValue = ""
+  }
+ }
+ function search(term) {
+  var re = new RegExp(term);
+  var el = document.getElementById("frames").children;
+  var matches = new Object();
+  var maxwidth = 0;
+  for (var i = 0; i < el.length; i++) {
+   var e = el[i];
+   var func = g_to_func(e);
+   var rect = find_child(e, "rect");
+   if (func == null || rect == null)
+    continue;
+
+   // Save max width. Only works as we have a root frame
+   var w = parseFloat(rect.attributes.width.value);
+   if (w > maxwidth)
+    maxwidth = w;
+
+   if (func.match(re)) {
+    // highlight
+    var x = parseFloat(rect.attributes.x.value);
+    orig_save(rect, "fill");
+    rect.attributes.fill.value = "rgb(230,0,230)";
+
+    // remember matches
+    if (matches[x] == undefined) {
+     matches[x] = w;
+    } else {
+     if (w > matches[x]) {
+      // overwrite with parent
+      matches[x] = w;
+     }
+    }
+    searching = 1;
+   }
+  }
+  if (!searching)
+   return;
+
+  searchbtn.classList.add("show");
+  searchbtn.firstChild.nodeValue = "Reset Search";
+
+  // calculate percent matched, excluding vertical overlap
+  var count = 0;
+  var lastx = -1;
+  var lastw = 0;
+  var keys = Array();
+  for (k in matches) {
+   if (matches.hasOwnProperty(k))
+    keys.push(k);
+  }
+  // sort the matched frames by their x location
+  // ascending, then width descending
+  keys.sort(function(a, b){
+   return a - b;
+  });
+  // Step through frames saving only the biggest bottom-up frames
+  // thanks to the sort order. This relies on the tree property
+  // where children are always smaller than their parents.
+  var fudge = 0.0001; // JavaScript floating point
+  for (var k in keys) {
+   var x = parseFloat(keys[k]);
+   var w = matches[keys[k]];
+   if (x >= lastx + lastw - fudge) {
+    count += w;
+    lastx = x;
+    lastw = w;
+   }
+  }
+  // display matched percent
+  matchedtxt.classList.remove("hide");
+  var pct = 100 * count / maxwidth;
+  if (pct != 100) pct = pct.toFixed(1)
+  matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+ }
+]]>
+</script>
+<rect fill="url(#background)" height="1574.0" width="1200.0" x="0.0" y="0"></rect>
+<text id="title" x="600.00" y="24">Flame Graph</text>
+<text id="details" x="10.00" y="1557"> </text>
+<text class="hide" id="unzoom" x="10.00" y="24">Reset Zoom</text>
+<text id="search" x="1090.00" y="24">Search</text>
+<text id="matched" x="1090.00" y="1557"> </text>
+<g id="frames">
+<g>
+<title>kola_set_locator (5 samples, 0.01%)</title><rect fill="rgb(210,203,20)" height="15.0" rx="2" ry="2" width="0.1" x="1081.9" y="725"></rect>
+<text x="1084.91" y="735.5"></text>
+</g>
+<g>
+<title>kohalc (13 samples, 0.02%)</title><rect fill="rgb(242,130,28)" height="15.0" rx="2" ry="2" width="0.3" x="962.3" y="693"></rect>
+<text x="965.33" y="703.5"></text>
+</g>
+<g>
+<title>__dta_xfs_vn_update_time_3412 (10 samples, 0.02%)</title><rect fill="rgb(223,133,1)" height="15.0" rx="2" ry="2" width="0.2" x="1089.0" y="165"></rect>
+<text x="1092.03" y="175.5"></text>
+</g>
+<g>
+<title>schedule (22 samples, 0.04%)</title><rect fill="rgb(229,224,14)" height="15.0" rx="2" ry="2" width="0.5" x="722.6" y="597"></rect>
+<text x="725.61" y="607.5"></text>
+</g>
+<g>
+<title>__vfs_write (5 samples, 0.01%)</title><rect fill="rgb(231,192,33)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="85"></rect>
+<text x="1103.62" y="95.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (5 samples, 0.01%)</title><rect fill="rgb(238,209,52)" height="15.0" rx="2" ry="2" width="0.1" x="12.8" y="741"></rect>
+<text x="15.75" y="751.5"></text>
+</g>
+<g>
+<title>tlb_flush_mmu (7 samples, 0.01%)</title><rect fill="rgb(237,211,41)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1301"></rect>
+<text x="1192.41" y="1311.5"></text>
+</g>
+<g>
+<title>kokliihdl (12 samples, 0.02%)</title><rect fill="rgb(254,58,45)" height="15.0" rx="2" ry="2" width="0.3" x="1091.1" y="629"></rect>
+<text x="1094.11" y="639.5"></text>
+</g>
+<g>
+<title>kcbzgb (19 samples, 0.03%)</title><rect fill="rgb(246,104,8)" height="15.0" rx="2" ry="2" width="0.4" x="1095.2" y="517"></rect>
+<text x="1098.22" y="527.5"></text>
+</g>
+<g>
+<title>free_pages_and_swap_cache (7 samples, 0.01%)</title><rect fill="rgb(229,148,42)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1269"></rect>
+<text x="1192.41" y="1279.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (7 samples, 0.01%)</title><rect fill="rgb(238,53,11)" height="15.0" rx="2" ry="2" width="0.2" x="963.2" y="773"></rect>
+<text x="966.24" y="783.5"></text>
+</g>
+<g>
+<title>kgghstine_wfp (51 samples, 0.09%)</title><rect fill="rgb(247,229,36)" height="15.0" rx="2" ry="2" width="1.1" x="1082.0" y="709"></rect>
+<text x="1085.01" y="719.5"></text>
+</g>
+<g>
+<title>kohalc (8 samples, 0.01%)</title><rect fill="rgb(252,144,6)" height="15.0" rx="2" ry="2" width="0.2" x="1083.1" y="677"></rect>
+<text x="1086.14" y="687.5"></text>
+</g>
+<g>
+<title>__handle_mm_fault (25 samples, 0.04%)</title><rect fill="rgb(254,201,28)" height="15.0" rx="2" ry="2" width="0.5" x="1099.6" y="357"></rect>
+<text x="1102.60" y="367.5"></text>
+</g>
+<g>
+<title>ktbchgro (33 samples, 0.06%)</title><rect fill="rgb(250,1,2)" height="15.0" rx="2" ry="2" width="0.7" x="735.7" y="645"></rect>
+<text x="738.70" y="655.5"></text>
+</g>
+<g>
+<title>kolaslWriteCreateTempLob (89 samples, 0.16%)</title><rect fill="rgb(246,63,6)" height="15.0" rx="2" ry="2" width="1.9" x="1101.0" y="645"></rect>
+<text x="1104.02" y="655.5"></text>
+</g>
+<g>
+<title>kghalf (10 samples, 0.02%)</title><rect fill="rgb(225,15,54)" height="15.0" rx="2" ry="2" width="0.2" x="1086.1" y="741"></rect>
+<text x="1089.08" y="751.5"></text>
+</g>
+<g>
+<title>sou2o (55,631 samples, 99.90%)</title><rect fill="rgb(251,228,3)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1429"></rect>
+<text x="13.34" y="1439.5">sou2o</text>
+</g>
+<g>
+<title>kohfrem (9 samples, 0.02%)</title><rect fill="rgb(250,210,51)" height="15.0" rx="2" ry="2" width="0.2" x="962.1" y="677"></rect>
+<text x="965.10" y="687.5"></text>
+</g>
+<g>
+<title>kolredur (44,967 samples, 80.75%)</title><rect fill="rgb(224,109,29)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="885"></rect>
+<text x="14.00" y="895.5">kolredur</text>
+</g>
+<g>
+<title>do_syscall_64 (5 samples, 0.01%)</title><rect fill="rgb(246,96,27)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="133"></rect>
+<text x="1103.62" y="143.5"></text>
+</g>
+<g>
+<title>opifch2 (55,602 samples, 99.85%)</title><rect fill="rgb(215,166,36)" height="15.0" rx="2" ry="2" width="1178.2" x="10.9" y="1013"></rect>
+<text x="13.91" y="1023.5">opifch2</text>
+</g>
+<g>
+<title>dbgtRecVAWriteDisk (37 samples, 0.07%)</title><rect fill="rgb(246,181,50)" height="15.0" rx="2" ry="2" width="0.8" x="1088.8" y="405"></rect>
+<text x="1091.77" y="415.5"></text>
+</g>
+<g>
+<title>finish_task_switch (30 samples, 0.05%)</title><rect fill="rgb(225,97,8)" height="15.0" rx="2" ry="2" width="0.6" x="479.9" y="565"></rect>
+<text x="482.85" y="575.5"></text>
+</g>
+<g>
+<title>kgh_invoke_alloc_cb (66 samples, 0.12%)</title><rect fill="rgb(250,135,3)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="533"></rect>
+<text x="1091.27" y="543.5"></text>
+</g>
+<g>
+<title>kdlrdo (130 samples, 0.23%)</title><rect fill="rgb(244,94,35)" height="15.0" rx="2" ry="2" width="2.8" x="1095.8" y="453"></rect>
+<text x="1098.83" y="463.5"></text>
+</g>
+<g>
+<title>ktecgsc (9 samples, 0.02%)</title><rect fill="rgb(251,105,38)" height="15.0" rx="2" ry="2" width="0.2" x="1094.6" y="469"></rect>
+<text x="1097.60" y="479.5"></text>
+</g>
+<g>
+<title>async_page_fault (61 samples, 0.11%)</title><rect fill="rgb(205,164,33)" height="15.0" rx="2" ry="2" width="1.2" x="1087.0" y="597"></rect>
+<text x="1089.95" y="607.5"></text>
+</g>
+<g>
+<title>entry_SYSCALL_64_after_hwframe (5 samples, 0.01%)</title><rect fill="rgb(253,136,46)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="133"></rect>
+<text x="1103.75" y="143.5"></text>
+</g>
+<g>
+<title>do_async_page_fault (41 samples, 0.07%)</title><rect fill="rgb(206,61,35)" height="15.0" rx="2" ry="2" width="0.9" x="1099.3" y="421"></rect>
+<text x="1102.31" y="431.5"></text>
+</g>
+<g>
+<title>run_timer_softirq (9 samples, 0.02%)</title><rect fill="rgb(230,83,0)" height="15.0" rx="2" ry="2" width="0.2" x="479.4" y="581"></rect>
+<text x="482.36" y="591.5"></text>
+</g>
+<g>
+<title>do_syscall_64 (31 samples, 0.06%)</title><rect fill="rgb(237,180,15)" height="15.0" rx="2" ry="2" width="0.7" x="1189.2" y="1461"></rect>
+<text x="1192.19" y="1471.5"></text>
+</g>
+<g>
+<title>__handle_mm_fault (35 samples, 0.06%)</title><rect fill="rgb(206,143,29)" height="15.0" rx="2" ry="2" width="0.7" x="1087.5" y="517"></rect>
+<text x="1090.50" y="527.5"></text>
+</g>
+<g>
+<title>tlb_finish_mmu (8 samples, 0.01%)</title><rect fill="rgb(238,82,40)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1333"></rect>
+<text x="1192.39" y="1343.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (28 samples, 0.05%)</title><rect fill="rgb(240,52,53)" height="15.0" rx="2" ry="2" width="0.6" x="721.6" y="645"></rect>
+<text x="724.59" y="655.5"></text>
+</g>
+<g>
+<title>rpidrv (55,607 samples, 99.86%)</title><rect fill="rgb(206,86,41)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1141"></rect>
+<text x="13.83" y="1151.5">rpidrv</text>
+</g>
+<g>
+<title>koklSurrCheck (7 samples, 0.01%)</title><rect fill="rgb(215,147,15)" height="15.0" rx="2" ry="2" width="0.1" x="1098.7" y="597"></rect>
+<text x="1101.67" y="607.5"></text>
+</g>
+<g>
+<title>plsql_run (55,610 samples, 99.86%)</title><rect fill="rgb(216,55,23)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1253"></rect>
+<text x="13.78" y="1263.5">plsql_run</text>
+</g>
+<g>
+<title>koklreadSurrChk (44 samples, 0.08%)</title><rect fill="rgb(210,99,13)" height="15.0" rx="2" ry="2" width="0.9" x="1091.9" y="597"></rect>
+<text x="1094.91" y="607.5"></text>
+</g>
+<g>
+<title>do_async_page_fault (9 samples, 0.02%)</title><rect fill="rgb(247,32,20)" height="15.0" rx="2" ry="2" width="0.2" x="1088.3" y="485"></rect>
+<text x="1091.31" y="495.5"></text>
+</g>
+<g>
+<title>dbgtTrcVaList_int (21 samples, 0.04%)</title><rect fill="rgb(206,212,18)" height="15.0" rx="2" ry="2" width="0.4" x="1100.5" y="261"></rect>
+<text x="1103.47" y="271.5"></text>
+</g>
+<g>
+<title>kpoal8 (55,610 samples, 99.86%)</title><rect fill="rgb(250,51,23)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1317"></rect>
+<text x="13.78" y="1327.5">kpoal8</text>
+</g>
+<g>
+<title>kollfre (14 samples, 0.03%)</title><rect fill="rgb(254,171,6)" height="15.0" rx="2" ry="2" width="0.3" x="962.0" y="741"></rect>
+<text x="964.99" y="751.5"></text>
+</g>
+<g>
+<title>kghalp (160 samples, 0.29%)</title><rect fill="rgb(238,200,1)" height="15.0" rx="2" ry="2" width="3.4" x="1086.4" y="725"></rect>
+<text x="1089.38" y="735.5"></text>
+</g>
+<g>
+<title>kolrghte (10 samples, 0.02%)</title><rect fill="rgb(237,123,35)" height="15.0" rx="2" ry="2" width="0.2" x="1105.0" y="837"></rect>
+<text x="1108.03" y="847.5"></text>
+</g>
+<g>
+<title>kdlfill (20 samples, 0.04%)</title><rect fill="rgb(218,131,45)" height="15.0" rx="2" ry="2" width="0.4" x="1098.2" y="437"></rect>
+<text x="1101.16" y="447.5"></text>
+</g>
+<g>
+<title>ksmrf_init_alloc (51 samples, 0.09%)</title><rect fill="rgb(215,216,12)" height="15.0" rx="2" ry="2" width="1.1" x="1088.6" y="501"></rect>
+<text x="1091.58" y="511.5"></text>
+</g>
+<g>
+<title>qerstRowP (6,579 samples, 11.81%)</title><rect fill="rgb(205,1,48)" height="15.0" rx="2" ry="2" width="139.4" x="964.7" y="869"></rect>
+<text x="967.68" y="879.5">qerstRowP</text>
+</g>
+<g>
+<title>kdlw_locator_op (13 samples, 0.02%)</title><rect fill="rgb(242,53,11)" height="15.0" rx="2" ry="2" width="0.3" x="1091.4" y="597"></rect>
+<text x="1094.44" y="607.5"></text>
+</g>
+<g>
+<title>kolaFree_rfc (44,931 samples, 80.69%)</title><rect fill="rgb(213,183,40)" height="15.0" rx="2" ry="2" width="952.1" x="11.8" y="805"></rect>
+<text x="14.76" y="815.5">kolaFree_rfc</text>
+</g>
+<g>
+<title>schedule (35 samples, 0.06%)</title><rect fill="rgb(212,190,30)" height="15.0" rx="2" ry="2" width="0.8" x="479.7" y="597"></rect>
+<text x="482.75" y="607.5"></text>
+</g>
+<g>
+<title>psddr0 (55,607 samples, 99.86%)</title><rect fill="rgb(217,128,25)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1157"></rect>
+<text x="13.83" y="1167.5">psddr0</text>
+</g>
+<g>
+<title>_intel_fast_memcmp (2,594 samples, 4.66%)</title><rect fill="rgb(242,36,30)" height="15.0" rx="2" ry="2" width="55.0" x="1107.1" y="869"></rect>
+<text x="1110.10" y="879.5">_inte..</text>
+</g>
+<g>
+<title>kolrarfc (6 samples, 0.01%)</title><rect fill="rgb(243,217,49)" height="15.0" rx="2" ry="2" width="0.2" x="1103.4" y="805"></rect>
+<text x="1106.44" y="815.5"></text>
+</g>
+<g>
+<title>ssthrdmain (55,631 samples, 99.90%)</title><rect fill="rgb(215,21,7)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1461"></rect>
+<text x="13.34" y="1471.5">ssthrdmain</text>
+</g>
+<g>
+<title>kolaCreate_rfc (178 samples, 0.32%)</title><rect fill="rgb(239,77,52)" height="15.0" rx="2" ry="2" width="3.7" x="1081.9" y="741"></rect>
+<text x="1084.87" y="751.5"></text>
+</g>
+<g>
+<title>ksni_handle_net_intr_int (21 samples, 0.04%)</title><rect fill="rgb(239,50,28)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1317"></rect>
+<text x="13.34" y="1327.5"></text>
+</g>
+<g>
+<title>kgicls (5 samples, 0.01%)</title><rect fill="rgb(214,181,8)" height="15.0" rx="2" ry="2" width="0.2" x="1090.4" y="597"></rect>
+<text x="1093.45" y="607.5"></text>
+</g>
+<g>
+<title>kokltcc (77 samples, 0.14%)</title><rect fill="rgb(219,95,42)" height="15.0" rx="2" ry="2" width="1.6" x="1101.2" y="597"></rect>
+<text x="1104.19" y="607.5"></text>
+</g>
+<g>
+<title>opiodr (55,631 samples, 99.90%)</title><rect fill="rgb(209,47,52)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1397"></rect>
+<text x="13.34" y="1407.5">opiodr</text>
+</g>
+<g>
+<title>kghalp (87 samples, 0.16%)</title><rect fill="rgb(249,78,35)" height="15.0" rx="2" ry="2" width="1.9" x="1099.1" y="581"></rect>
+<text x="1102.14" y="591.5"></text>
+</g>
+<g>
+<title>release_pages (6 samples, 0.01%)</title><rect fill="rgb(242,82,44)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1253"></rect>
+<text x="1192.43" y="1263.5"></text>
+</g>
+<g>
+<title>koklcprv (10 samples, 0.02%)</title><rect fill="rgb(206,106,54)" height="15.0" rx="2" ry="2" width="0.2" x="1092.6" y="533"></rect>
+<text x="1095.57" y="543.5"></text>
+</g>
+<g>
+<title>kdltfinddur (5 samples, 0.01%)</title><rect fill="rgb(228,178,53)" height="15.0" rx="2" ry="2" width="0.1" x="734.9" y="661"></rect>
+<text x="737.90" y="671.5"></text>
+</g>
+<g>
+<title>do_syscall_64 (5 samples, 0.01%)</title><rect fill="rgb(232,205,17)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="117"></rect>
+<text x="1103.75" y="127.5"></text>
+</g>
+<g>
+<title>opidrv (55,631 samples, 99.90%)</title><rect fill="rgb(209,45,37)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1413"></rect>
+<text x="13.34" y="1423.5">opidrv</text>
+</g>
+<g>
+<title>kokegOpnGC_Lob (5,458 samples, 9.80%)</title><rect fill="rgb(222,177,48)" height="15.0" rx="2" ry="2" width="115.6" x="965.0" y="805"></rect>
+<text x="967.98" y="815.5">kokegOpnGC_Lob</text>
+</g>
+<g>
+<title>ksmarfg (34 samples, 0.06%)</title><rect fill="rgb(249,99,45)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="357"></rect>
+<text x="1103.20" y="367.5"></text>
+</g>
+<g>
+<title>kdlw_locator_op (17 samples, 0.03%)</title><rect fill="rgb(243,71,52)" height="15.0" rx="2" ry="2" width="0.4" x="1081.2" y="725"></rect>
+<text x="1084.21" y="735.5"></text>
+</g>
+<g>
+<title>entry_SYSCALL_64_after_hwframe (17 samples, 0.03%)</title><rect fill="rgb(215,228,19)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="309"></rect>
+<text x="1092.01" y="319.5"></text>
+</g>
+<g>
+<title>rpiswu2 (55,607 samples, 99.86%)</title><rect fill="rgb(210,188,54)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1125"></rect>
+<text x="13.83" y="1135.5">rpiswu2</text>
+</g>
+<g>
+<title>koklCurrentDataInline (20 samples, 0.04%)</title><rect fill="rgb(238,19,20)" height="15.0" rx="2" ry="2" width="0.4" x="1081.2" y="741"></rect>
+<text x="1084.21" y="751.5"></text>
+</g>
+<g>
+<title>handle_mm_fault (25 samples, 0.04%)</title><rect fill="rgb(210,226,9)" height="15.0" rx="2" ry="2" width="0.5" x="1099.6" y="373"></rect>
+<text x="1102.60" y="383.5"></text>
+</g>
+<g>
+<title>unmap_region (11 samples, 0.02%)</title><rect fill="rgb(241,223,27)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1349"></rect>
+<text x="1192.36" y="1359.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (15 samples, 0.03%)</title><rect fill="rgb(247,109,39)" height="15.0" rx="2" ry="2" width="0.4" x="1028.4" y="725"></rect>
+<text x="1031.45" y="735.5"></text>
+</g>
+<g>
+<title>kolrghte (13 samples, 0.02%)</title><rect fill="rgb(232,159,23)" height="15.0" rx="2" ry="2" width="0.3" x="1102.4" y="549"></rect>
+<text x="1105.40" y="559.5"></text>
+</g>
+<g>
+<title>qersoProcessULS (6,607 samples, 11.86%)</title><rect fill="rgb(216,123,23)" height="15.0" rx="2" ry="2" width="140.0" x="964.1" y="949"></rect>
+<text x="967.11" y="959.5">qersoProcessULS</text>
+</g>
+<g>
+<title>kolaGetHeap (21 samples, 0.04%)</title><rect fill="rgb(238,187,41)" height="15.0" rx="2" ry="2" width="0.5" x="1085.6" y="757"></rect>
+<text x="1088.64" y="767.5"></text>
+</g>
+<g>
+<title>all (55,686 samples, 100%)</title><rect fill="rgb(211,88,50)" height="15.0" rx="2" ry="2" width="1180.0" x="10.0" y="1525"></rect>
+<text x="13.00" y="1535.5"></text>
+</g>
+<g>
+<title>kgh_invoke_alloc_cb (35 samples, 0.06%)</title><rect fill="rgb(237,214,20)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="373"></rect>
+<text x="1103.17" y="383.5"></text>
+</g>
+<g>
+<title>kokegPinLob (3,828 samples, 6.87%)</title><rect fill="rgb(237,2,0)" height="15.0" rx="2" ry="2" width="81.1" x="1107.1" y="901"></rect>
+<text x="1110.08" y="911.5">kokegPinLob</text>
+</g>
+<g>
+<title>kcbchg1_main (138 samples, 0.25%)</title><rect fill="rgb(250,222,4)" height="15.0" rx="2" ry="2" width="2.9" x="1095.7" y="501"></rect>
+<text x="1098.66" y="511.5"></text>
+</g>
+<g>
+<title>qmuhshget_internal (1,408 samples, 2.53%)</title><rect fill="rgb(207,18,2)" height="15.0" rx="2" ry="2" width="29.8" x="1028.8" y="757"></rect>
+<text x="1031.76" y="767.5">qm..</text>
+</g>
+<g>
+<title>kokegPromoteLob (21 samples, 0.04%)</title><rect fill="rgb(213,98,15)" height="15.0" rx="2" ry="2" width="0.4" x="1103.4" y="821"></rect>
+<text x="1106.35" y="831.5"></text>
+</g>
+<g>
+<title>dbgtTrcVaList_int (5 samples, 0.01%)</title><rect fill="rgb(254,96,10)" height="15.0" rx="2" ry="2" width="0.1" x="963.9" y="965"></rect>
+<text x="966.88" y="975.5"></text>
+</g>
+<g>
+<title>kolrdrfc (20 samples, 0.04%)</title><rect fill="rgb(220,21,41)" height="15.0" rx="2" ry="2" width="0.4" x="963.4" y="789"></rect>
+<text x="966.39" y="799.5"></text>
+</g>
+<g>
+<title>kdl_write1 (254 samples, 0.46%)</title><rect fill="rgb(254,4,24)" height="15.0" rx="2" ry="2" width="5.4" x="1093.2" y="581"></rect>
+<text x="1096.20" y="591.5"></text>
+</g>
+<g>
+<title>ttcpip (55,631 samples, 99.90%)</title><rect fill="rgb(254,129,39)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1349"></rect>
+<text x="13.34" y="1359.5">ttcpip</text>
+</g>
+<g>
+<title>do_anonymous_page (25 samples, 0.04%)</title><rect fill="rgb(240,29,48)" height="15.0" rx="2" ry="2" width="0.5" x="1099.6" y="341"></rect>
+<text x="1102.60" y="351.5"></text>
+</g>
+<g>
+<title>kolaAssign_rfc (20 samples, 0.04%)</title><rect fill="rgb(242,185,8)" height="15.0" rx="2" ry="2" width="0.4" x="1104.6" y="837"></rect>
+<text x="1107.56" y="847.5"></text>
+</g>
+<g>
+<title>koltitfr (44,820 samples, 80.49%)</title><rect fill="rgb(243,208,7)" height="15.0" rx="2" ry="2" width="949.8" x="13.0" y="757"></rect>
+<text x="16.01" y="767.5">koltitfr</text>
+</g>
+<g>
+<title>kokltslfn (5 samples, 0.01%)</title><rect fill="rgb(242,120,36)" height="15.0" rx="2" ry="2" width="0.1" x="1098.8" y="581"></rect>
+<text x="1101.84" y="591.5"></text>
+</g>
+<g>
+<title>kohfrem (5 samples, 0.01%)</title><rect fill="rgb(229,222,42)" height="15.0" rx="2" ry="2" width="0.2" x="12.6" y="709"></rect>
+<text x="15.65" y="719.5"></text>
+</g>
+<g>
+<title>kgghash (7 samples, 0.01%)</title><rect fill="rgb(251,59,1)" height="15.0" rx="2" ry="2" width="0.1" x="11.6" y="789"></rect>
+<text x="14.59" y="799.5"></text>
+</g>
+<g>
+<title>sys_write (5 samples, 0.01%)</title><rect fill="rgb(214,200,47)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="101"></rect>
+<text x="1103.75" y="111.5"></text>
+</g>
+<g>
+<title>schedule (23 samples, 0.04%)</title><rect fill="rgb(231,63,34)" height="15.0" rx="2" ry="2" width="0.5" x="248.8" y="629"></rect>
+<text x="251.79" y="639.5"></text>
+</g>
+<g>
+<title>kdlw_xid_eq (14 samples, 0.03%)</title><rect fill="rgb(231,151,30)" height="15.0" rx="2" ry="2" width="0.3" x="1081.3" y="693"></rect>
+<text x="1084.27" y="703.5"></text>
+</g>
+<g>
+<title>ksm_pga_limit_interrupt (21 samples, 0.04%)</title><rect fill="rgb(236,219,13)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1269"></rect>
+<text x="13.34" y="1279.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (43 samples, 0.08%)</title><rect fill="rgb(231,223,54)" height="15.0" rx="2" ry="2" width="1.0" x="247.5" y="677"></rect>
+<text x="250.54" y="687.5"></text>
+</g>
+<g>
+<title>kghfnd (69 samples, 0.12%)</title><rect fill="rgb(214,205,25)" height="15.0" rx="2" ry="2" width="1.5" x="1088.2" y="613"></rect>
+<text x="1091.24" y="623.5"></text>
+</g>
+<g>
+<title>run_timer_softirq (7 samples, 0.01%)</title><rect fill="rgb(232,131,14)" height="15.0" rx="2" ry="2" width="0.1" x="950.2" y="597"></rect>
+<text x="953.17" y="607.5"></text>
+</g>
+<g>
+<title>kolttfr (44,827 samples, 80.50%)</title><rect fill="rgb(251,131,34)" height="15.0" rx="2" ry="2" width="949.9" x="12.9" y="773"></rect>
+<text x="15.86" y="783.5">kolttfr</text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (12 samples, 0.02%)</title><rect fill="rgb(248,193,8)" height="15.0" rx="2" ry="2" width="0.3" x="1161.8" y="853"></rect>
+<text x="1164.82" y="863.5"></text>
+</g>
+<g>
+<title>vm_mmap_pgoff (26 samples, 0.05%)</title><rect fill="rgb(238,125,37)" height="15.0" rx="2" ry="2" width="0.6" x="1189.2" y="1413"></rect>
+<text x="1192.24" y="1423.5"></text>
+</g>
+<g>
+<title>rworupo (3,862 samples, 6.94%)</title><rect fill="rgb(215,226,53)" height="15.0" rx="2" ry="2" width="81.9" x="1107.0" y="949"></rect>
+<text x="1110.04" y="959.5">rworupo</text>
+</g>
+<g>
+<title>koklRead (71 samples, 0.13%)</title><rect fill="rgb(211,70,19)" height="15.0" rx="2" ry="2" width="1.5" x="1091.4" y="645"></rect>
+<text x="1094.40" y="655.5"></text>
+</g>
+<g>
+<title>kdlrsp (136 samples, 0.24%)</title><rect fill="rgb(232,129,8)" height="15.0" rx="2" ry="2" width="2.9" x="735.0" y="677"></rect>
+<text x="738.00" y="687.5"></text>
+</g>
+<g>
+<title>async_page_fault (9 samples, 0.02%)</title><rect fill="rgb(220,81,41)" height="15.0" rx="2" ry="2" width="0.2" x="1088.3" y="501"></rect>
+<text x="1091.31" y="511.5"></text>
+</g>
+<g>
+<title>ktecgetsh (11 samples, 0.02%)</title><rect fill="rgb(235,3,34)" height="15.0" rx="2" ry="2" width="0.2" x="1094.6" y="485"></rect>
+<text x="1097.58" y="495.5"></text>
+</g>
+<g>
+<title>kolrghte (5 samples, 0.01%)</title><rect fill="rgb(205,96,44)" height="15.0" rx="2" ry="2" width="0.1" x="1103.7" y="789"></rect>
+<text x="1106.69" y="799.5"></text>
+</g>
+<g>
+<title>koklglfn (7 samples, 0.01%)</title><rect fill="rgb(230,223,52)" height="15.0" rx="2" ry="2" width="0.2" x="1098.8" y="597"></rect>
+<text x="1101.82" y="607.5"></text>
+</g>
+<g>
+<title>do_anonymous_page (5 samples, 0.01%)</title><rect fill="rgb(210,167,42)" height="15.0" rx="2" ry="2" width="0.1" x="1088.4" y="405"></rect>
+<text x="1091.39" y="415.5"></text>
+</g>
+<g>
+<title>kollfrfn (5 samples, 0.01%)</title><rect fill="rgb(246,155,43)" height="15.0" rx="2" ry="2" width="0.2" x="12.6" y="757"></rect>
+<text x="15.65" y="767.5"></text>
+</g>
+<g>
+<title>main (55,631 samples, 99.90%)</title><rect fill="rgb(232,68,10)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1477"></rect>
+<text x="13.34" y="1487.5">main</text>
+</g>
+<g>
+<title>kolrddc (9 samples, 0.02%)</title><rect fill="rgb(219,49,54)" height="15.0" rx="2" ry="2" width="0.2" x="1106.0" y="805"></rect>
+<text x="1109.04" y="815.5"></text>
+</g>
+<g>
+<title>irq_exit (10 samples, 0.02%)</title><rect fill="rgb(219,43,5)" height="15.0" rx="2" ry="2" width="0.2" x="1028.2" y="709"></rect>
+<text x="1031.23" y="719.5"></text>
+</g>
+<g>
+<title>finish_task_switch (18 samples, 0.03%)</title><rect fill="rgb(221,76,48)" height="15.0" rx="2" ry="2" width="0.4" x="722.7" y="565"></rect>
+<text x="725.69" y="575.5"></text>
+</g>
+<g>
+<title>handle_mm_fault (35 samples, 0.06%)</title><rect fill="rgb(206,79,16)" height="15.0" rx="2" ry="2" width="0.7" x="1087.5" y="533"></rect>
+<text x="1090.50" y="543.5"></text>
+</g>
+<g>
+<title>kokegOpnGarbagePromote (25 samples, 0.04%)</title><rect fill="rgb(237,211,9)" height="15.0" rx="2" ry="2" width="0.5" x="1103.3" y="837"></rect>
+<text x="1106.31" y="847.5"></text>
+</g>
+<g>
+<title>kolrarfc (106 samples, 0.19%)</title><rect fill="rgb(221,211,50)" height="15.0" rx="2" ry="2" width="2.3" x="1083.3" y="725"></rect>
+<text x="1086.35" y="735.5"></text>
+</g>
+<g>
+<title>kghalf (8 samples, 0.01%)</title><rect fill="rgb(239,229,37)" height="15.0" rx="2" ry="2" width="0.1" x="1071.2" y="757"></rect>
+<text x="1074.17" y="767.5"></text>
+</g>
+<g>
+<title>kgghstdle_wfp (20 samples, 0.04%)</title><rect fill="rgb(233,193,34)" height="15.0" rx="2" ry="2" width="0.4" x="962.8" y="773"></rect>
+<text x="965.82" y="783.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (11,139 samples, 20.00%)</title><rect fill="rgb(215,147,38)" height="15.0" rx="2" ry="2" width="236.1" x="13.2" y="693"></rect>
+<text x="16.24" y="703.5">_intel_fast_memcmp</text>
+</g>
+<g>
+<title>kokltfc (44,780 samples, 80.42%)</title><rect fill="rgb(249,191,25)" height="15.0" rx="2" ry="2" width="948.9" x="13.1" y="741"></rect>
+<text x="16.09" y="751.5">kokltfc</text>
+</g>
+<g>
+<title>kdl_destroy (22,554 samples, 40.50%)</title><rect fill="rgb(223,122,18)" height="15.0" rx="2" ry="2" width="477.9" x="260.3" y="693"></rect>
+<text x="263.26" y="703.5">kdl_destroy</text>
+</g>
+<g>
+<title>kpdbHashTable_Find (6 samples, 0.01%)</title><rect fill="rgb(239,89,41)" height="15.0" rx="2" ry="2" width="0.1" x="1090.9" y="549"></rect>
+<text x="1093.91" y="559.5"></text>
+</g>
+<g>
+<title>peicnt (55,610 samples, 99.86%)</title><rect fill="rgb(220,23,44)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1269"></rect>
+<text x="13.78" y="1279.5">peicnt</text>
+</g>
+<g>
+<title>irq_exit (5 samples, 0.01%)</title><rect fill="rgb(221,79,52)" height="15.0" rx="2" ry="2" width="0.1" x="1080.4" y="709"></rect>
+<text x="1083.43" y="719.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (591 samples, 1.06%)</title><rect fill="rgb(225,129,7)" height="15.0" rx="2" ry="2" width="12.5" x="1058.6" y="757"></rect>
+<text x="1061.62" y="767.5"></text>
+</g>
+<g>
+<title>kolrde_alloc (8 samples, 0.01%)</title><rect fill="rgb(236,37,18)" height="15.0" rx="2" ry="2" width="0.2" x="1083.1" y="693"></rect>
+<text x="1086.14" y="703.5"></text>
+</g>
+<g>
+<title>rcu_process_callbacks (6 samples, 0.01%)</title><rect fill="rgb(209,27,21)" height="15.0" rx="2" ry="2" width="0.1" x="950.0" y="597"></rect>
+<text x="953.02" y="607.5"></text>
+</g>
+<g>
+<title>koklInlineRead (50 samples, 0.09%)</title><rect fill="rgb(217,44,47)" height="15.0" rx="2" ry="2" width="1.0" x="1091.8" y="613"></rect>
+<text x="1094.78" y="623.5"></text>
+</g>
+<g>
+<title>irq_exit (43 samples, 0.08%)</title><rect fill="rgb(230,48,18)" height="15.0" rx="2" ry="2" width="1.0" x="247.5" y="645"></rect>
+<text x="250.54" y="655.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (40 samples, 0.07%)</title><rect fill="rgb(250,206,47)" height="15.0" rx="2" ry="2" width="0.8" x="949.5" y="661"></rect>
+<text x="952.49" y="671.5"></text>
+</g>
+<g>
+<title>kokacau (8 samples, 0.01%)</title><rect fill="rgb(248,53,8)" height="15.0" rx="2" ry="2" width="0.2" x="1092.6" y="485"></rect>
+<text x="1095.61" y="495.5"></text>
+</g>
+<g>
+<title>kohfrw (5 samples, 0.01%)</title><rect fill="rgb(250,205,9)" height="15.0" rx="2" ry="2" width="0.2" x="12.6" y="741"></rect>
+<text x="15.65" y="751.5"></text>
+</g>
+<g>
+<title>kdlopen (11,508 samples, 20.67%)</title><rect fill="rgb(228,137,24)" height="15.0" rx="2" ry="2" width="243.9" x="491.1" y="677"></rect>
+<text x="494.15" y="687.5">kdlopen</text>
+</g>
+<g>
+<title>kgghstdle_wfp (6 samples, 0.01%)</title><rect fill="rgb(210,62,18)" height="15.0" rx="2" ry="2" width="0.1" x="963.4" y="773"></rect>
+<text x="966.39" y="783.5"></text>
+</g>
+<g>
+<title>pmuocpy (61 samples, 0.11%)</title><rect fill="rgb(245,144,11)" height="15.0" rx="2" ry="2" width="1.3" x="1105.7" y="901"></rect>
+<text x="1108.71" y="911.5"></text>
+</g>
+<g>
+<title>koklWrite (277 samples, 0.50%)</title><rect fill="rgb(212,148,37)" height="15.0" rx="2" ry="2" width="5.8" x="1093.2" y="613"></rect>
+<text x="1096.16" y="623.5"></text>
+</g>
+<g>
+<title>kolaCreateClob (178 samples, 0.32%)</title><rect fill="rgb(248,187,30)" height="15.0" rx="2" ry="2" width="3.7" x="1081.9" y="757"></rect>
+<text x="1084.87" y="767.5"></text>
+</g>
+<g>
+<title>kohfrr (5 samples, 0.01%)</title><rect fill="rgb(253,104,38)" height="15.0" rx="2" ry="2" width="0.2" x="12.6" y="725"></rect>
+<text x="15.65" y="735.5"></text>
+</g>
+<g>
+<title>kdlw_xid_eq (7 samples, 0.01%)</title><rect fill="rgb(241,70,7)" height="15.0" rx="2" ry="2" width="0.2" x="1091.5" y="565"></rect>
+<text x="1094.53" y="575.5"></text>
+</g>
+<g>
+<title>__dta_xfs_file_buffered_aio_write_3297 (5 samples, 0.01%)</title><rect fill="rgb(253,225,17)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="53"></rect>
+<text x="1103.62" y="63.5"></text>
+</g>
+<g>
+<title>kdlt_filltid (11,654 samples, 20.93%)</title><rect fill="rgb(223,74,30)" height="15.0" rx="2" ry="2" width="247.0" x="13.2" y="709"></rect>
+<text x="16.24" y="719.5">kdlt_filltid</text>
+</g>
+<g>
+<title>do_page_fault (41 samples, 0.07%)</title><rect fill="rgb(219,137,24)" height="15.0" rx="2" ry="2" width="0.9" x="1099.3" y="405"></rect>
+<text x="1102.31" y="415.5"></text>
+</g>
+<g>
+<title>kcbhfho (10 samples, 0.02%)</title><rect fill="rgb(230,204,17)" height="15.0" rx="2" ry="2" width="0.2" x="1094.9" y="517"></rect>
+<text x="1097.92" y="527.5"></text>
+</g>
+<g>
+<title>kghualloc (6 samples, 0.01%)</title><rect fill="rgb(208,129,11)" height="15.0" rx="2" ry="2" width="0.1" x="1083.2" y="645"></rect>
+<text x="1086.18" y="655.5"></text>
+</g>
+<g>
+<title>kcbzgs (13 samples, 0.02%)</title><rect fill="rgb(226,187,26)" height="15.0" rx="2" ry="2" width="0.2" x="737.4" y="565"></rect>
+<text x="740.36" y="575.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (43 samples, 0.08%)</title><rect fill="rgb(254,127,11)" height="15.0" rx="2" ry="2" width="1.0" x="247.5" y="661"></rect>
+<text x="250.54" y="671.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (14 samples, 0.03%)</title><rect fill="rgb(217,30,44)" height="15.0" rx="2" ry="2" width="0.3" x="1058.3" y="709"></rect>
+<text x="1061.30" y="719.5"></text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (39 samples, 0.07%)</title><rect fill="rgb(253,195,18)" height="15.0" rx="2" ry="2" width="0.8" x="248.5" y="677"></rect>
+<text x="251.45" y="687.5"></text>
+</g>
+<g>
+<title>__schedule (35 samples, 0.06%)</title><rect fill="rgb(230,33,41)" height="15.0" rx="2" ry="2" width="0.8" x="479.7" y="581"></rect>
+<text x="482.75" y="591.5"></text>
+</g>
+<g>
+<title>koklAbsCopy (618 samples, 1.11%)</title><rect fill="rgb(227,42,48)" height="15.0" rx="2" ry="2" width="13.1" x="1089.9" y="709"></rect>
+<text x="1092.88" y="719.5"></text>
+</g>
+<g>
+<title>do_munmap (13 samples, 0.02%)</title><rect fill="rgb(252,61,12)" height="15.0" rx="2" ry="2" width="0.3" x="1189.3" y="1365"></rect>
+<text x="1192.34" y="1375.5"></text>
+</g>
+<g>
+<title>kolrgmd (6 samples, 0.01%)</title><rect fill="rgb(230,144,0)" height="15.0" rx="2" ry="2" width="0.1" x="1103.6" y="805"></rect>
+<text x="1106.56" y="815.5"></text>
+</g>
+<g>
+<title>opifcr (136 samples, 0.24%)</title><rect fill="rgb(219,57,38)" height="15.0" rx="2" ry="2" width="2.9" x="1104.1" y="933"></rect>
+<text x="1107.12" y="943.5"></text>
+</g>
+<g>
+<title>kolttcr (82 samples, 0.15%)</title><rect fill="rgb(232,40,19)" height="15.0" rx="2" ry="2" width="1.7" x="1101.2" y="629"></rect>
+<text x="1104.17" y="639.5"></text>
+</g>
+<g>
+<title>kcbhfix_tail (6 samples, 0.01%)</title><rect fill="rgb(248,198,34)" height="15.0" rx="2" ry="2" width="0.1" x="1095.0" y="501"></rect>
+<text x="1098.00" y="511.5"></text>
+</g>
+<g>
+<title>dbgtfdFileWrite (24 samples, 0.04%)</title><rect fill="rgb(217,142,24)" height="15.0" rx="2" ry="2" width="0.5" x="1088.9" y="357"></rect>
+<text x="1091.86" y="367.5"></text>
+</g>
+<g>
+<title>kdlclose (10,877 samples, 19.53%)</title><rect fill="rgb(210,174,26)" height="15.0" rx="2" ry="2" width="230.4" x="260.7" y="677"></rect>
+<text x="263.66" y="687.5">kdlclose</text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (5 samples, 0.01%)</title><rect fill="rgb(225,0,37)" height="15.0" rx="2" ry="2" width="0.1" x="1071.0" y="725"></rect>
+<text x="1073.97" y="735.5"></text>
+</g>
+<g>
+<title>sdbgrfwf_write_file (17 samples, 0.03%)</title><rect fill="rgb(226,61,39)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="341"></rect>
+<text x="1092.01" y="351.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (6 samples, 0.01%)</title><rect fill="rgb(205,85,37)" height="15.0" rx="2" ry="2" width="0.1" x="1161.9" y="805"></rect>
+<text x="1164.86" y="815.5"></text>
+</g>
+<g>
+<title>__dta_xfs_file_buffered_aio_write_3297 (5 samples, 0.01%)</title><rect fill="rgb(210,219,38)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="37"></rect>
+<text x="1103.75" y="47.5"></text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (45 samples, 0.08%)</title><rect fill="rgb(239,129,53)" height="15.0" rx="2" ry="2" width="0.9" x="479.6" y="645"></rect>
+<text x="482.55" y="655.5"></text>
+</g>
+<g>
+<title>kgghstmap (44,967 samples, 80.75%)</title><rect fill="rgb(206,182,22)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="869"></rect>
+<text x="14.00" y="879.5">kgghstmap</text>
+</g>
+<g>
+<title>skgmstack (55,607 samples, 99.86%)</title><rect fill="rgb(223,9,18)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1093"></rect>
+<text x="13.83" y="1103.5">skgmstack</text>
+</g>
+<g>
+<title>ktsbbsrch (31 samples, 0.06%)</title><rect fill="rgb(229,218,34)" height="15.0" rx="2" ry="2" width="0.7" x="1093.8" y="517"></rect>
+<text x="1096.80" y="527.5"></text>
+</g>
+<g>
+<title>free_hot_cold_page_list (6 samples, 0.01%)</title><rect fill="rgb(234,171,14)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1237"></rect>
+<text x="1192.43" y="1247.5"></text>
+</g>
+<g>
+<title>kollasg (51 samples, 0.09%)</title><rect fill="rgb(213,223,7)" height="15.0" rx="2" ry="2" width="1.1" x="1104.5" y="869"></rect>
+<text x="1107.52" y="879.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (7 samples, 0.01%)</title><rect fill="rgb(228,161,46)" height="15.0" rx="2" ry="2" width="0.1" x="1058.2" y="725"></rect>
+<text x="1061.15" y="735.5"></text>
+</g>
+<g>
+<title>opimai_real (55,631 samples, 99.90%)</title><rect fill="rgb(251,119,51)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1445"></rect>
+<text x="13.34" y="1455.5">opimai_real</text>
+</g>
+<g>
+<title>kdlwfb (237 samples, 0.43%)</title><rect fill="rgb(225,96,28)" height="15.0" rx="2" ry="2" width="5.0" x="1093.6" y="565"></rect>
+<text x="1096.56" y="575.5"></text>
+</g>
+<g>
+<title>irq_exit (40 samples, 0.07%)</title><rect fill="rgb(250,49,38)" height="15.0" rx="2" ry="2" width="0.8" x="949.5" y="629"></rect>
+<text x="952.49" y="639.5"></text>
+</g>
+<g>
+<title>opipls (55,605 samples, 99.85%)</title><rect fill="rgb(214,185,42)" height="15.0" rx="2" ry="2" width="1178.3" x="10.9" y="1045"></rect>
+<text x="13.87" y="1055.5">opipls</text>
+</g>
+<g>
+<title>kolaFree (44 samples, 0.08%)</title><rect fill="rgb(238,175,21)" height="15.0" rx="2" ry="2" width="1.0" x="1106.0" y="837"></rect>
+<text x="1109.02" y="847.5"></text>
+</g>
+<g>
+<title>kxsFreeWorkArea (44,968 samples, 80.75%)</title><rect fill="rgb(243,214,47)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="965"></rect>
+<text x="13.97" y="975.5">kxsFreeWorkArea</text>
+</g>
+<g>
+<title>koklReadCbk (70 samples, 0.13%)</title><rect fill="rgb(237,164,51)" height="15.0" rx="2" ry="2" width="1.5" x="1091.4" y="629"></rect>
+<text x="1094.42" y="639.5"></text>
+</g>
+<g>
+<title>kolrdladd (12 samples, 0.02%)</title><rect fill="rgb(229,11,14)" height="15.0" rx="2" ry="2" width="0.2" x="1083.1" y="709"></rect>
+<text x="1086.10" y="719.5"></text>
+</g>
+<g>
+<title>irq_exit (38 samples, 0.07%)</title><rect fill="rgb(209,51,38)" height="15.0" rx="2" ry="2" width="0.9" x="478.7" y="613"></rect>
+<text x="481.75" y="623.5"></text>
+</g>
+<g>
+<title>__do_page_fault (40 samples, 0.07%)</title><rect fill="rgb(209,183,1)" height="15.0" rx="2" ry="2" width="0.9" x="1099.3" y="389"></rect>
+<text x="1102.31" y="399.5"></text>
+</g>
+<g>
+<title>xfs_file_write_iter (17 samples, 0.03%)</title><rect fill="rgb(235,146,10)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="229"></rect>
+<text x="1092.01" y="239.5"></text>
+</g>
+<g>
+<title>qersoFetch (10,625 samples, 19.08%)</title><rect fill="rgb(239,139,48)" height="15.0" rx="2" ry="2" width="225.1" x="964.0" y="981"></rect>
+<text x="966.98" y="991.5">qersoFetch</text>
+</g>
+<g>
+<title>kghfrh_internal (8 samples, 0.01%)</title><rect fill="rgb(210,151,30)" height="15.0" rx="2" ry="2" width="0.1" x="12.5" y="773"></rect>
+<text x="15.48" y="783.5"></text>
+</g>
+<g>
+<title>kdlrci_get_inline_data (9 samples, 0.02%)</title><rect fill="rgb(238,44,33)" height="15.0" rx="2" ry="2" width="0.2" x="1081.0" y="741"></rect>
+<text x="1084.02" y="751.5"></text>
+</g>
+<g>
+<title>kohalc (7 samples, 0.01%)</title><rect fill="rgb(231,140,37)" height="15.0" rx="2" ry="2" width="0.2" x="1104.3" y="853"></rect>
+<text x="1107.35" y="863.5"></text>
+</g>
+<g>
+<title>schedule (6 samples, 0.01%)</title><rect fill="rgb(253,136,6)" height="15.0" rx="2" ry="2" width="0.2" x="1028.6" y="693"></rect>
+<text x="1031.64" y="703.5"></text>
+</g>
+<g>
+<title>kcoapl (134 samples, 0.24%)</title><rect fill="rgb(242,108,26)" height="15.0" rx="2" ry="2" width="2.9" x="1095.7" y="485"></rect>
+<text x="1098.75" y="495.5"></text>
+</g>
+<g>
+<title>kole_getFillChar (9 samples, 0.02%)</title><rect fill="rgb(223,60,50)" height="15.0" rx="2" ry="2" width="0.2" x="961.4" y="709"></rect>
+<text x="964.40" y="719.5"></text>
+</g>
+<g>
+<title>kohfrw (13 samples, 0.02%)</title><rect fill="rgb(241,75,17)" height="15.0" rx="2" ry="2" width="0.3" x="962.0" y="709"></rect>
+<text x="965.01" y="719.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (38 samples, 0.07%)</title><rect fill="rgb(209,153,17)" height="15.0" rx="2" ry="2" width="0.9" x="478.7" y="629"></rect>
+<text x="481.75" y="639.5"></text>
+</g>
+<g>
+<title>pmuocpy2_copy_recur (61 samples, 0.11%)</title><rect fill="rgb(245,171,34)" height="15.0" rx="2" ry="2" width="1.3" x="1105.7" y="885"></rect>
+<text x="1108.71" y="895.5"></text>
+</g>
+<g>
+<title>__do_softirq (7 samples, 0.01%)</title><rect fill="rgb(236,44,26)" height="15.0" rx="2" ry="2" width="0.2" x="1161.6" y="805"></rect>
+<text x="1164.63" y="815.5"></text>
+</g>
+<g>
+<title>kollasg (56 samples, 0.10%)</title><rect fill="rgb(205,133,44)" height="15.0" rx="2" ry="2" width="1.2" x="1105.8" y="869"></rect>
+<text x="1108.77" y="879.5"></text>
+</g>
+<g>
+<title>koklCurrentDataInline (17 samples, 0.03%)</title><rect fill="rgb(219,177,43)" height="15.0" rx="2" ry="2" width="0.4" x="1091.4" y="613"></rect>
+<text x="1094.42" y="623.5"></text>
+</g>
+<g>
+<title>irq_exit (7 samples, 0.01%)</title><rect fill="rgb(208,173,40)" height="15.0" rx="2" ry="2" width="0.1" x="1058.2" y="709"></rect>
+<text x="1061.15" y="719.5"></text>
+</g>
+<g>
+<title>kdstf010000100000000kmP (6,606 samples, 11.86%)</title><rect fill="rgb(230,28,5)" height="15.0" rx="2" ry="2" width="140.0" x="964.1" y="885"></rect>
+<text x="967.11" y="895.5">kdstf010000100000..</text>
+</g>
+<g>
+<title>kghufree (12 samples, 0.02%)</title><rect fill="rgb(248,110,10)" height="15.0" rx="2" ry="2" width="0.2" x="962.9" y="709"></rect>
+<text x="965.88" y="719.5"></text>
+</g>
+<g>
+<title>kdlt_freetemp (33,088 samples, 59.42%)</title><rect fill="rgb(232,129,5)" height="15.0" rx="2" ry="2" width="701.1" x="260.2" y="709"></rect>
+<text x="263.19" y="719.5">kdlt_freetemp</text>
+</g>
+<g>
+<title>kolaslFree (44,871 samples, 80.58%)</title><rect fill="rgb(214,147,46)" height="15.0" rx="2" ry="2" width="950.9" x="11.9" y="789"></rect>
+<text x="14.93" y="799.5">kolaslFree</text>
+</g>
+<g>
+<title>kgghstfel_wfp (17 samples, 0.03%)</title><rect fill="rgb(209,203,44)" height="15.0" rx="2" ry="2" width="0.4" x="1106.6" y="773"></rect>
+<text x="1109.60" y="783.5"></text>
+</g>
+<g>
+<title>kgghash (22 samples, 0.04%)</title><rect fill="rgb(243,171,50)" height="15.0" rx="2" ry="2" width="0.4" x="1082.6" y="693"></rect>
+<text x="1085.57" y="703.5"></text>
+</g>
+<g>
+<title>kghalf (15 samples, 0.03%)</title><rect fill="rgb(205,161,3)" height="15.0" rx="2" ry="2" width="0.3" x="1085.7" y="741"></rect>
+<text x="1088.72" y="751.5"></text>
+</g>
+<g>
+<title>__mmap64 (32 samples, 0.06%)</title><rect fill="rgb(251,5,15)" height="15.0" rx="2" ry="2" width="0.7" x="1189.2" y="1493"></rect>
+<text x="1192.17" y="1503.5"></text>
+</g>
+<g>
+<title>kgghash (15 samples, 0.03%)</title><rect fill="rgb(208,204,10)" height="15.0" rx="2" ry="2" width="0.3" x="1083.7" y="693"></rect>
+<text x="1086.67" y="703.5"></text>
+</g>
+<g>
+<title>koklc_copy (633 samples, 1.14%)</title><rect fill="rgb(210,206,18)" height="15.0" rx="2" ry="2" width="13.4" x="1089.8" y="757"></rect>
+<text x="1092.79" y="767.5"></text>
+</g>
+<g>
+<title>kolrgrfc (5 samples, 0.01%)</title><rect fill="rgb(235,80,47)" height="15.0" rx="2" ry="2" width="0.1" x="12.8" y="773"></rect>
+<text x="15.75" y="783.5"></text>
+</g>
+<g>
+<title>kghgex (36 samples, 0.06%)</title><rect fill="rgb(248,36,33)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="437"></rect>
+<text x="1103.17" y="447.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (15 samples, 0.03%)</title><rect fill="rgb(237,121,45)" height="15.0" rx="2" ry="2" width="0.3" x="1085.3" y="677"></rect>
+<text x="1088.26" y="687.5"></text>
+</g>
+<g>
+<title>koklClosePCursor (10 samples, 0.02%)</title><rect fill="rgb(229,222,44)" height="15.0" rx="2" ry="2" width="0.2" x="1090.4" y="629"></rect>
+<text x="1093.38" y="639.5"></text>
+</g>
+<g>
+<title>oracle_16067_sf (55,686 samples, 100.00%)</title><rect fill="rgb(250,141,23)" height="15.0" rx="2" ry="2" width="1180.0" x="10.0" y="1509"></rect>
+<text x="13.00" y="1519.5">oracle_16067_sf</text>
+</g>
+<g>
+<title>rpidrus (55,607 samples, 99.86%)</title><rect fill="rgb(211,41,38)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1077"></rect>
+<text x="13.83" y="1087.5">rpidrus</text>
+</g>
+<g>
+<title>ktcsna (10 samples, 0.02%)</title><rect fill="rgb(253,164,29)" height="15.0" rx="2" ry="2" width="0.2" x="1081.3" y="677"></rect>
+<text x="1084.32" y="687.5"></text>
+</g>
+<g>
+<title>kolaFree_rfc (43 samples, 0.08%)</title><rect fill="rgb(223,106,24)" height="15.0" rx="2" ry="2" width="1.0" x="1106.0" y="821"></rect>
+<text x="1109.04" y="831.5"></text>
+</g>
+<g>
+<title>__handle_mm_fault (6 samples, 0.01%)</title><rect fill="rgb(248,170,32)" height="15.0" rx="2" ry="2" width="0.1" x="1088.4" y="421"></rect>
+<text x="1091.37" y="431.5"></text>
+</g>
+<g>
+<title>pevm_BFTCHC (55,607 samples, 99.86%)</title><rect fill="rgb(225,28,13)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1189"></rect>
+<text x="13.83" y="1199.5">pevm_BFTCHC</text>
+</g>
+<g>
+<title>koklpgsz (58 samples, 0.10%)</title><rect fill="rgb(211,99,16)" height="15.0" rx="2" ry="2" width="1.2" x="1090.2" y="661"></rect>
+<text x="1093.15" y="671.5"></text>
+</g>
+<g>
+<title>_raw_spin_lock (7 samples, 0.01%)</title><rect fill="rgb(234,141,42)" height="15.0" rx="2" ry="2" width="0.2" x="1087.6" y="485"></rect>
+<text x="1090.61" y="495.5"></text>
+</g>
+<g>
+<title>kokle_substr (1,066 samples, 1.91%)</title><rect fill="rgb(228,111,3)" height="15.0" rx="2" ry="2" width="22.6" x="1080.7" y="821"></rect>
+<text x="1083.68" y="831.5">k..</text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (9 samples, 0.02%)</title><rect fill="rgb(205,169,12)" height="15.0" rx="2" ry="2" width="0.2" x="1161.6" y="837"></rect>
+<text x="1164.63" y="847.5"></text>
+</g>
+<g>
+<title>koklSurrCheck (7 samples, 0.01%)</title><rect fill="rgb(212,220,4)" height="15.0" rx="2" ry="2" width="0.2" x="1103.0" y="725"></rect>
+<text x="1106.04" y="735.5"></text>
+</g>
+<g>
+<title>kohalmc (5 samples, 0.01%)</title><rect fill="rgb(253,12,44)" height="15.0" rx="2" ry="2" width="0.1" x="1104.4" y="837"></rect>
+<text x="1107.39" y="847.5"></text>
+</g>
+<g>
+<title>kdlt_add_tlob_ctl_link (5 samples, 0.01%)</title><rect fill="rgb(210,6,24)" height="15.0" rx="2" ry="2" width="0.1" x="1101.3" y="549"></rect>
+<text x="1104.28" y="559.5"></text>
+</g>
+<g>
+<title>kghsupmm (88 samples, 0.16%)</title><rect fill="rgb(252,163,32)" height="15.0" rx="2" ry="2" width="1.9" x="1099.1" y="597"></rect>
+<text x="1102.12" y="607.5"></text>
+</g>
+<g>
+<title>sys_write (5 samples, 0.01%)</title><rect fill="rgb(236,61,19)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="117"></rect>
+<text x="1103.62" y="127.5"></text>
+</g>
+<g>
+<title>opikndf2 (21 samples, 0.04%)</title><rect fill="rgb(205,62,43)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1333"></rect>
+<text x="13.34" y="1343.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (15 samples, 0.03%)</title><rect fill="rgb(234,40,42)" height="15.0" rx="2" ry="2" width="0.3" x="722.3" y="597"></rect>
+<text x="725.29" y="607.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (6 samples, 0.01%)</title><rect fill="rgb(208,5,48)" height="15.0" rx="2" ry="2" width="0.1" x="1105.1" y="805"></rect>
+<text x="1108.11" y="815.5"></text>
+</g>
+<g>
+<title>kghgex (6 samples, 0.01%)</title><rect fill="rgb(231,203,14)" height="15.0" rx="2" ry="2" width="0.1" x="1086.2" y="725"></rect>
+<text x="1089.17" y="735.5"></text>
+</g>
+<g>
+<title>qerstFetch (10,625 samples, 19.08%)</title><rect fill="rgb(215,3,4)" height="15.0" rx="2" ry="2" width="225.1" x="964.0" y="997"></rect>
+<text x="966.98" y="1007.5">qerstFetch</text>
+</g>
+<g>
+<title>mmap_region (21 samples, 0.04%)</title><rect fill="rgb(230,203,38)" height="15.0" rx="2" ry="2" width="0.4" x="1189.3" y="1381"></rect>
+<text x="1192.28" y="1391.5"></text>
+</g>
+<g>
+<title>kolrarfc (57 samples, 0.10%)</title><rect fill="rgb(253,25,24)" height="15.0" rx="2" ry="2" width="1.2" x="1101.5" y="565"></rect>
+<text x="1104.47" y="575.5"></text>
+</g>
+<g>
+<title>kslwtectx (47 samples, 0.08%)</title><rect fill="rgb(242,85,46)" height="15.0" rx="2" ry="2" width="1.0" x="1088.6" y="469"></rect>
+<text x="1091.65" y="479.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (5 samples, 0.01%)</title><rect fill="rgb(216,124,21)" height="15.0" rx="2" ry="2" width="0.1" x="1080.4" y="725"></rect>
+<text x="1083.43" y="735.5"></text>
+</g>
+<g>
+<title>kokegGarbageCollectRworo (3,861 samples, 6.93%)</title><rect fill="rgb(251,63,24)" height="15.0" rx="2" ry="2" width="81.8" x="1107.1" y="933"></rect>
+<text x="1110.06" y="943.5">kokegGarb..</text>
+</g>
+<g>
+<title>kghssagptr (90 samples, 0.16%)</title><rect fill="rgb(243,210,13)" height="15.0" rx="2" ry="2" width="1.9" x="1099.1" y="629"></rect>
+<text x="1102.07" y="639.5"></text>
+</g>
+<g>
+<title>kolrgrfc (17 samples, 0.03%)</title><rect fill="rgb(208,18,23)" height="15.0" rx="2" ry="2" width="0.4" x="1106.6" y="805"></rect>
+<text x="1109.60" y="815.5"></text>
+</g>
+<g>
+<title>kolttfr_ed (44,932 samples, 80.69%)</title><rect fill="rgb(239,109,9)" height="15.0" rx="2" ry="2" width="952.2" x="11.7" y="837"></rect>
+<text x="14.74" y="847.5">kolttfr_ed</text>
+</g>
+<g>
+<title>kghgex (145 samples, 0.26%)</title><rect fill="rgb(239,160,32)" height="15.0" rx="2" ry="2" width="3.0" x="1086.7" y="645"></rect>
+<text x="1089.68" y="655.5"></text>
+</g>
+<g>
+<title>__handle_mm_fault (5 samples, 0.01%)</title><rect fill="rgb(221,209,34)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="261"></rect>
+<text x="1103.24" y="271.5"></text>
+</g>
+<g>
+<title>kolaAssign (7 samples, 0.01%)</title><rect fill="rgb(247,181,6)" height="15.0" rx="2" ry="2" width="0.2" x="1105.8" y="853"></rect>
+<text x="1108.83" y="863.5"></text>
+</g>
+<g>
+<title>kollalop (5 samples, 0.01%)</title><rect fill="rgb(216,140,21)" height="15.0" rx="2" ry="2" width="0.1" x="1101.0" y="629"></rect>
+<text x="1104.04" y="639.5"></text>
+</g>
+<g>
+<title>kolrdrfc (8 samples, 0.01%)</title><rect fill="rgb(218,124,8)" height="15.0" rx="2" ry="2" width="0.2" x="961.6" y="709"></rect>
+<text x="964.61" y="719.5"></text>
+</g>
+<g>
+<title>kole_append (633 samples, 1.14%)</title><rect fill="rgb(211,11,28)" height="15.0" rx="2" ry="2" width="13.4" x="1089.8" y="773"></rect>
+<text x="1092.79" y="783.5"></text>
+</g>
+<g>
+<title>__write_nocancel (17 samples, 0.03%)</title><rect fill="rgb(245,41,32)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="325"></rect>
+<text x="1092.01" y="335.5"></text>
+</g>
+<g>
+<title>do_anonymous_page (30 samples, 0.05%)</title><rect fill="rgb(219,88,18)" height="15.0" rx="2" ry="2" width="0.6" x="1087.6" y="501"></rect>
+<text x="1090.59" y="511.5"></text>
+</g>
+<g>
+<title>kolaAssign (21 samples, 0.04%)</title><rect fill="rgb(205,75,52)" height="15.0" rx="2" ry="2" width="0.5" x="1104.5" y="853"></rect>
+<text x="1107.54" y="863.5"></text>
+</g>
+<g>
+<title>koklpgszCbk (17 samples, 0.03%)</title><rect fill="rgb(227,116,10)" height="15.0" rx="2" ry="2" width="0.3" x="1092.5" y="549"></rect>
+<text x="1095.46" y="559.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (13 samples, 0.02%)</title><rect fill="rgb(226,80,29)" height="15.0" rx="2" ry="2" width="0.3" x="1102.4" y="533"></rect>
+<text x="1105.40" y="543.5"></text>
+</g>
+<g>
+<title>__schedule (6 samples, 0.01%)</title><rect fill="rgb(225,115,52)" height="15.0" rx="2" ry="2" width="0.2" x="1028.6" y="677"></rect>
+<text x="1031.64" y="687.5"></text>
+</g>
+<g>
+<title>dbgtRecVAWriteDisk (5 samples, 0.01%)</title><rect fill="rgb(206,100,22)" height="15.0" rx="2" ry="2" width="0.1" x="963.9" y="949"></rect>
+<text x="966.88" y="959.5"></text>
+</g>
+<g>
+<title>ktecgshx (38 samples, 0.07%)</title><rect fill="rgb(248,83,8)" height="15.0" rx="2" ry="2" width="0.8" x="737.0" y="629"></rect>
+<text x="739.99" y="639.5"></text>
+</g>
+<g>
+<title>kolaslWrite (467 samples, 0.84%)</title><rect fill="rgb(234,72,3)" height="15.0" rx="2" ry="2" width="9.9" x="1093.0" y="661"></rect>
+<text x="1096.01" y="671.5"></text>
+</g>
+<g>
+<title>kolttfr (44 samples, 0.08%)</title><rect fill="rgb(253,8,30)" height="15.0" rx="2" ry="2" width="1.0" x="1106.0" y="853"></rect>
+<text x="1109.02" y="863.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcpy (40 samples, 0.07%)</title><rect fill="rgb(241,91,49)" height="15.0" rx="2" ry="2" width="0.9" x="1097.3" y="437"></rect>
+<text x="1100.31" y="447.5"></text>
+</g>
+<g>
+<title>koklc_write (279 samples, 0.50%)</title><rect fill="rgb(254,187,18)" height="15.0" rx="2" ry="2" width="5.9" x="1093.1" y="645"></rect>
+<text x="1096.12" y="655.5"></text>
+</g>
+<g>
+<title>entry_SYSCALL_64_after_hwframe (5 samples, 0.01%)</title><rect fill="rgb(246,158,5)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="149"></rect>
+<text x="1103.62" y="159.5"></text>
+</g>
+<g>
+<title>sdbgrfwf_write_file (5 samples, 0.01%)</title><rect fill="rgb(226,135,6)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="165"></rect>
+<text x="1103.75" y="175.5"></text>
+</g>
+<g>
+<title>koklCurrentDataInline (8 samples, 0.01%)</title><rect fill="rgb(253,161,52)" height="15.0" rx="2" ry="2" width="0.1" x="1092.0" y="581"></rect>
+<text x="1094.97" y="591.5"></text>
+</g>
+<g>
+<title>do_mmap (23 samples, 0.04%)</title><rect fill="rgb(227,62,22)" height="15.0" rx="2" ry="2" width="0.5" x="1189.2" y="1397"></rect>
+<text x="1192.24" y="1407.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (33 samples, 0.06%)</title><rect fill="rgb(252,190,12)" height="15.0" rx="2" ry="2" width="0.7" x="950.4" y="629"></rect>
+<text x="953.40" y="639.5"></text>
+</g>
+<g>
+<title>kolrddc (30 samples, 0.05%)</title><rect fill="rgb(205,122,34)" height="15.0" rx="2" ry="2" width="0.6" x="962.8" y="789"></rect>
+<text x="965.76" y="799.5"></text>
+</g>
+<g>
+<title>kgghstine_wfp (23 samples, 0.04%)</title><rect fill="rgb(219,226,38)" height="15.0" rx="2" ry="2" width="0.5" x="1101.5" y="549"></rect>
+<text x="1104.47" y="559.5"></text>
+</g>
+<g>
+<title>__do_page_fault (61 samples, 0.11%)</title><rect fill="rgb(231,196,25)" height="15.0" rx="2" ry="2" width="1.2" x="1087.0" y="549"></rect>
+<text x="1089.95" y="559.5"></text>
+</g>
+<g>
+<title>finish_task_switch (5 samples, 0.01%)</title><rect fill="rgb(247,198,34)" height="15.0" rx="2" ry="2" width="0.1" x="1058.5" y="661"></rect>
+<text x="1061.49" y="671.5"></text>
+</g>
+<g>
+<title>__do_softirq (39 samples, 0.07%)</title><rect fill="rgb(250,0,30)" height="15.0" rx="2" ry="2" width="0.8" x="949.5" y="613"></rect>
+<text x="952.49" y="623.5"></text>
+</g>
+<g>
+<title>__do_softirq (41 samples, 0.07%)</title><rect fill="rgb(219,31,46)" height="15.0" rx="2" ry="2" width="0.9" x="247.5" y="629"></rect>
+<text x="250.54" y="639.5"></text>
+</g>
+<g>
+<title>kghbshrt (45 samples, 0.08%)</title><rect fill="rgb(205,36,54)" height="15.0" rx="2" ry="2" width="1.0" x="1099.2" y="453"></rect>
+<text x="1102.22" y="463.5"></text>
+</g>
+<g>
+<title>kollulin (15 samples, 0.03%)</title><rect fill="rgb(248,200,46)" height="15.0" rx="2" ry="2" width="0.3" x="962.3" y="741"></rect>
+<text x="965.29" y="751.5"></text>
+</g>
+<g>
+<title>__schedule (17 samples, 0.03%)</title><rect fill="rgb(254,99,13)" height="15.0" rx="2" ry="2" width="0.4" x="950.7" y="597"></rect>
+<text x="953.74" y="607.5"></text>
+</g>
+<g>
+<title>__alloc_pages_nodemask (11 samples, 0.02%)</title><rect fill="rgb(244,161,38)" height="15.0" rx="2" ry="2" width="0.2" x="1099.7" y="309"></rect>
+<text x="1102.67" y="319.5"></text>
+</g>
+<g>
+<title>xfs_file_write_iter (5 samples, 0.01%)</title><rect fill="rgb(233,63,31)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="69"></rect>
+<text x="1103.62" y="79.5"></text>
+</g>
+<g>
+<title>__schedule (7 samples, 0.01%)</title><rect fill="rgb(242,213,18)" height="15.0" rx="2" ry="2" width="0.1" x="1058.5" y="677"></rect>
+<text x="1061.45" y="687.5"></text>
+</g>
+<g>
+<title>kolrghte (35 samples, 0.06%)</title><rect fill="rgb(216,33,37)" height="15.0" rx="2" ry="2" width="0.7" x="1084.9" y="709"></rect>
+<text x="1087.85" y="719.5"></text>
+</g>
+<g>
+<title>kole_t2u_int (8 samples, 0.01%)</title><rect fill="rgb(249,194,14)" height="15.0" rx="2" ry="2" width="0.2" x="961.4" y="677"></rect>
+<text x="964.42" y="687.5"></text>
+</g>
+<g>
+<title>kghfrempty_subheaps_all (21 samples, 0.04%)</title><rect fill="rgb(238,149,20)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1237"></rect>
+<text x="13.34" y="1247.5"></text>
+</g>
+<g>
+<title>alloc_pages_vma (11 samples, 0.02%)</title><rect fill="rgb(214,182,47)" height="15.0" rx="2" ry="2" width="0.2" x="1099.7" y="325"></rect>
+<text x="1102.67" y="335.5"></text>
+</g>
+<g>
+<title>kolradlst (63 samples, 0.11%)</title><rect fill="rgb(219,87,25)" height="15.0" rx="2" ry="2" width="1.3" x="1082.0" y="725"></rect>
+<text x="1085.01" y="735.5"></text>
+</g>
+<g>
+<title>kghalo (149 samples, 0.27%)</title><rect fill="rgb(222,123,34)" height="15.0" rx="2" ry="2" width="3.2" x="1086.6" y="677"></rect>
+<text x="1089.61" y="687.5"></text>
+</g>
+<g>
+<title>sys_mmap_pgoff (26 samples, 0.05%)</title><rect fill="rgb(241,143,20)" height="15.0" rx="2" ry="2" width="0.6" x="1189.2" y="1429"></rect>
+<text x="1192.24" y="1439.5"></text>
+</g>
+<g>
+<title>ktsbvini (12 samples, 0.02%)</title><rect fill="rgb(218,210,44)" height="15.0" rx="2" ry="2" width="0.2" x="1094.6" y="517"></rect>
+<text x="1097.56" y="527.5"></text>
+</g>
+<g>
+<title>kokegGarbageCollectOpn (5,463 samples, 9.81%)</title><rect fill="rgb(247,146,26)" height="15.0" rx="2" ry="2" width="115.8" x="964.9" y="821"></rect>
+<text x="967.90" y="831.5">kokegGarbageCo..</text>
+</g>
+<g>
+<title>sorgetqbf (11 samples, 0.02%)</title><rect fill="rgb(245,68,39)" height="15.0" rx="2" ry="2" width="0.2" x="1188.9" y="949"></rect>
+<text x="1191.90" y="959.5"></text>
+</g>
+<g>
+<title>ktecgetsh (37 samples, 0.07%)</title><rect fill="rgb(246,18,19)" height="15.0" rx="2" ry="2" width="0.8" x="737.0" y="613"></rect>
+<text x="740.02" y="623.5"></text>
+</g>
+<g>
+<title>sdbgrfwf_write_file (6 samples, 0.01%)</title><rect fill="rgb(244,100,36)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="181"></rect>
+<text x="1103.60" y="191.5"></text>
+</g>
+<g>
+<title>schedule (7 samples, 0.01%)</title><rect fill="rgb(211,89,18)" height="15.0" rx="2" ry="2" width="0.1" x="1058.5" y="693"></rect>
+<text x="1061.45" y="703.5"></text>
+</g>
+<g>
+<title>kohalmc (5 samples, 0.01%)</title><rect fill="rgb(238,106,9)" height="15.0" rx="2" ry="2" width="0.1" x="1101.0" y="581"></rect>
+<text x="1104.04" y="591.5"></text>
+</g>
+<g>
+<title>kghfnd (86 samples, 0.15%)</title><rect fill="rgb(227,1,10)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="549"></rect>
+<text x="1102.16" y="559.5"></text>
+</g>
+<g>
+<title>irq_exit (28 samples, 0.05%)</title><rect fill="rgb(209,93,38)" height="15.0" rx="2" ry="2" width="0.6" x="721.6" y="613"></rect>
+<text x="724.59" y="623.5"></text>
+</g>
+<g>
+<title>koltitcr (81 samples, 0.15%)</title><rect fill="rgb(235,94,2)" height="15.0" rx="2" ry="2" width="1.7" x="1101.2" y="613"></rect>
+<text x="1104.19" y="623.5"></text>
+</g>
+<g>
+<title>sys_mmap (26 samples, 0.05%)</title><rect fill="rgb(223,27,11)" height="15.0" rx="2" ry="2" width="0.6" x="1189.2" y="1445"></rect>
+<text x="1192.24" y="1455.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (9 samples, 0.02%)</title><rect fill="rgb(248,161,51)" height="15.0" rx="2" ry="2" width="0.1" x="479.6" y="597"></rect>
+<text x="482.55" y="607.5"></text>
+</g>
+<g>
+<title>koklcprv (24 samples, 0.04%)</title><rect fill="rgb(237,7,3)" height="15.0" rx="2" ry="2" width="0.5" x="1090.6" y="629"></rect>
+<text x="1093.60" y="639.5"></text>
+</g>
+<g>
+<title>dbgtfWriteRec (18 samples, 0.03%)</title><rect fill="rgb(234,168,24)" height="15.0" rx="2" ry="2" width="0.4" x="1100.5" y="229"></rect>
+<text x="1103.53" y="239.5"></text>
+</g>
+<g>
+<title>kdsttgr (6,606 samples, 11.86%)</title><rect fill="rgb(247,30,46)" height="15.0" rx="2" ry="2" width="140.0" x="964.1" y="901"></rect>
+<text x="967.11" y="911.5">kdsttgr</text>
+</g>
+<g>
+<title>kdlgsp (59 samples, 0.11%)</title><rect fill="rgb(242,7,49)" height="15.0" rx="2" ry="2" width="1.2" x="1093.6" y="549"></rect>
+<text x="1096.56" y="559.5"></text>
+</g>
+<g>
+<title>kghfrmrg (7 samples, 0.01%)</title><rect fill="rgb(230,52,2)" height="15.0" rx="2" ry="2" width="0.2" x="10.6" y="1173"></rect>
+<text x="13.64" y="1183.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (38 samples, 0.07%)</title><rect fill="rgb(215,187,44)" height="15.0" rx="2" ry="2" width="0.8" x="248.5" y="645"></rect>
+<text x="251.48" y="655.5"></text>
+</g>
+<g>
+<title>arch_tlb_finish_mmu (7 samples, 0.01%)</title><rect fill="rgb(217,98,49)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1317"></rect>
+<text x="1192.41" y="1327.5"></text>
+</g>
+<g>
+<title>xfs_trans_alloc (6 samples, 0.01%)</title><rect fill="rgb(210,127,40)" height="15.0" rx="2" ry="2" width="0.2" x="1089.0" y="149"></rect>
+<text x="1092.03" y="159.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (44 samples, 0.08%)</title><rect fill="rgb(252,175,37)" height="15.0" rx="2" ry="2" width="0.9" x="479.6" y="613"></rect>
+<text x="482.55" y="623.5"></text>
+</g>
+<g>
+<title>kokltfr_pdbcbk (44,771 samples, 80.40%)</title><rect fill="rgb(205,97,1)" height="15.0" rx="2" ry="2" width="948.8" x="13.2" y="725"></rect>
+<text x="16.24" y="735.5">kokltfr_pdbcbk</text>
+</g>
+<g>
+<title>kolrgrfc (8 samples, 0.01%)</title><rect fill="rgb(225,54,43)" height="15.0" rx="2" ry="2" width="0.2" x="961.8" y="709"></rect>
+<text x="964.78" y="719.5"></text>
+</g>
+<g>
+<title>kghfrf (15 samples, 0.03%)</title><rect fill="rgb(221,53,35)" height="15.0" rx="2" ry="2" width="0.3" x="12.2" y="773"></rect>
+<text x="15.16" y="783.5"></text>
+</g>
+<g>
+<title>kghalo (85 samples, 0.15%)</title><rect fill="rgb(252,172,19)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="517"></rect>
+<text x="1102.18" y="527.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (14 samples, 0.03%)</title><rect fill="rgb(247,188,25)" height="15.0" rx="2" ry="2" width="0.3" x="1058.3" y="725"></rect>
+<text x="1061.30" y="735.5"></text>
+</g>
+<g>
+<title>kolaFree (17 samples, 0.03%)</title><rect fill="rgb(237,182,28)" height="15.0" rx="2" ry="2" width="0.4" x="1105.2" y="837"></rect>
+<text x="1108.24" y="847.5"></text>
+</g>
+<g>
+<title>finish_task_switch (20 samples, 0.04%)</title><rect fill="rgb(229,131,48)" height="15.0" rx="2" ry="2" width="0.4" x="248.9" y="597"></rect>
+<text x="251.86" y="607.5"></text>
+</g>
+<g>
+<title>qerstRowP (138 samples, 0.25%)</title><rect fill="rgb(252,155,11)" height="15.0" rx="2" ry="2" width="2.9" x="1104.1" y="949"></rect>
+<text x="1107.12" y="959.5"></text>
+</g>
+<g>
+<title>opiodr (55,610 samples, 99.86%)</title><rect fill="rgb(253,83,50)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1333"></rect>
+<text x="13.78" y="1343.5">opiodr</text>
+</g>
+<g>
+<title>koklNeedSurrChk (6 samples, 0.01%)</title><rect fill="rgb(235,211,23)" height="15.0" rx="2" ry="2" width="0.1" x="1103.1" y="709"></rect>
+<text x="1106.06" y="719.5"></text>
+</g>
+<g>
+<title>dbgtTrc_int (5 samples, 0.01%)</title><rect fill="rgb(232,168,54)" height="15.0" rx="2" ry="2" width="0.1" x="963.9" y="981"></rect>
+<text x="966.88" y="991.5"></text>
+</g>
+<g>
+<title>kghfnd (66 samples, 0.12%)</title><rect fill="rgb(250,184,9)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="565"></rect>
+<text x="1091.27" y="575.5"></text>
+</g>
+<g>
+<title>do_anonymous_page (5 samples, 0.01%)</title><rect fill="rgb(253,139,9)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="245"></rect>
+<text x="1103.24" y="255.5"></text>
+</g>
+<g>
+<title>vfs_write (5 samples, 0.01%)</title><rect fill="rgb(244,88,0)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="101"></rect>
+<text x="1103.62" y="111.5"></text>
+</g>
+<g>
+<title>kghprmalo (158 samples, 0.28%)</title><rect fill="rgb(254,52,4)" height="15.0" rx="2" ry="2" width="3.4" x="1086.4" y="709"></rect>
+<text x="1089.42" y="719.5"></text>
+</g>
+<g>
+<title>kghalp (7 samples, 0.01%)</title><rect fill="rgb(222,109,34)" height="15.0" rx="2" ry="2" width="0.2" x="965.0" y="773"></rect>
+<text x="968.04" y="783.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (10,047 samples, 18.04%)</title><rect fill="rgb(245,47,47)" height="15.0" rx="2" ry="2" width="212.9" x="738.2" y="677"></rect>
+<text x="741.22" y="687.5">_intel_fast_memcmp</text>
+</g>
+<g>
+<title>kcbgcur (13 samples, 0.02%)</title><rect fill="rgb(248,207,7)" height="15.0" rx="2" ry="2" width="0.2" x="735.4" y="645"></rect>
+<text x="738.36" y="655.5"></text>
+</g>
+<g>
+<title>kdltfindctl (477 samples, 0.86%)</title><rect fill="rgb(245,186,41)" height="15.0" rx="2" ry="2" width="10.1" x="951.1" y="677"></rect>
+<text x="954.12" y="687.5"></text>
+</g>
+<g>
+<title>kolrgrfc (10 samples, 0.02%)</title><rect fill="rgb(219,52,13)" height="15.0" rx="2" ry="2" width="0.2" x="1105.0" y="853"></rect>
+<text x="1108.03" y="863.5"></text>
+</g>
+<g>
+<title>opiino (55,631 samples, 99.90%)</title><rect fill="rgb(207,212,4)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1381"></rect>
+<text x="13.34" y="1391.5">opiino</text>
+</g>
+<g>
+<title>free_hot_cold_page (5 samples, 0.01%)</title><rect fill="rgb(249,216,18)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1221"></rect>
+<text x="1192.45" y="1231.5"></text>
+</g>
+<g>
+<title>kprccu (66 samples, 0.12%)</title><rect fill="rgb(250,45,26)" height="15.0" rx="2" ry="2" width="1.4" x="1104.2" y="917"></rect>
+<text x="1107.20" y="927.5"></text>
+</g>
+<g>
+<title>kdlf_write (259 samples, 0.47%)</title><rect fill="rgb(245,53,2)" height="15.0" rx="2" ry="2" width="5.5" x="1093.2" y="597"></rect>
+<text x="1096.18" y="607.5"></text>
+</g>
+<g>
+<title>kghprmalo (87 samples, 0.16%)</title><rect fill="rgb(210,14,41)" height="15.0" rx="2" ry="2" width="1.9" x="1099.1" y="565"></rect>
+<text x="1102.14" y="575.5"></text>
+</g>
+<g>
+<title>dbgtfmWriteMetadata (9 samples, 0.02%)</title><rect fill="rgb(226,43,26)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="213"></rect>
+<text x="1103.73" y="223.5"></text>
+</g>
+<g>
+<title>kksumc (44,968 samples, 80.75%)</title><rect fill="rgb(213,212,12)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="997"></rect>
+<text x="13.97" y="1007.5">kksumc</text>
+</g>
+<g>
+<title>ktsbgsp1 (58 samples, 0.10%)</title><rect fill="rgb(210,5,34)" height="15.0" rx="2" ry="2" width="1.2" x="1093.6" y="533"></rect>
+<text x="1096.58" y="543.5"></text>
+</g>
+<g>
+<title>kohfrr (17 samples, 0.03%)</title><rect fill="rgb(222,164,23)" height="15.0" rx="2" ry="2" width="0.3" x="962.9" y="741"></rect>
+<text x="965.88" y="751.5"></text>
+</g>
+<g>
+<title>kolaAssign_rfc (7 samples, 0.01%)</title><rect fill="rgb(250,70,27)" height="15.0" rx="2" ry="2" width="0.2" x="1105.8" y="837"></rect>
+<text x="1108.83" y="847.5"></text>
+</g>
+<g>
+<title>kohalc (5 samples, 0.01%)</title><rect fill="rgb(207,126,2)" height="15.0" rx="2" ry="2" width="0.1" x="1101.0" y="597"></rect>
+<text x="1104.04" y="607.5"></text>
+</g>
+<g>
+<title>__do_softirq (10 samples, 0.02%)</title><rect fill="rgb(248,59,33)" height="15.0" rx="2" ry="2" width="0.2" x="1028.2" y="693"></rect>
+<text x="1031.23" y="703.5"></text>
+</g>
+<g>
+<title>kohalw (13 samples, 0.02%)</title><rect fill="rgb(221,9,21)" height="15.0" rx="2" ry="2" width="0.3" x="962.3" y="709"></rect>
+<text x="965.33" y="719.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (8 samples, 0.01%)</title><rect fill="rgb(209,73,40)" height="15.0" rx="2" ry="2" width="0.2" x="1105.4" y="773"></rect>
+<text x="1108.43" y="783.5"></text>
+</g>
+<g>
+<title>dbgtfdFileWrite (7 samples, 0.01%)</title><rect fill="rgb(253,11,6)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="197"></rect>
+<text x="1103.58" y="207.5"></text>
+</g>
+<g>
+<title>kolaCopy (613 samples, 1.10%)</title><rect fill="rgb(208,15,25)" height="15.0" rx="2" ry="2" width="13.0" x="1090.0" y="693"></rect>
+<text x="1092.96" y="703.5"></text>
+</g>
+<g>
+<title>kokavpr (8 samples, 0.01%)</title><rect fill="rgb(226,145,16)" height="15.0" rx="2" ry="2" width="0.2" x="1092.6" y="517"></rect>
+<text x="1095.61" y="527.5"></text>
+</g>
+<g>
+<title>do_page_fault (9 samples, 0.02%)</title><rect fill="rgb(250,2,22)" height="15.0" rx="2" ry="2" width="0.2" x="1088.3" y="469"></rect>
+<text x="1091.31" y="479.5"></text>
+</g>
+<g>
+<title>kdlw_locator_op_read (10 samples, 0.02%)</title><rect fill="rgb(212,166,17)" height="15.0" rx="2" ry="2" width="0.2" x="1091.5" y="581"></rect>
+<text x="1094.49" y="591.5"></text>
+</g>
+<g>
+<title>kolrghte (22 samples, 0.04%)</title><rect fill="rgb(246,21,48)" height="15.0" rx="2" ry="2" width="0.4" x="11.3" y="821"></rect>
+<text x="14.27" y="831.5"></text>
+</g>
+<g>
+<title>kghbshrt (72 samples, 0.13%)</title><rect fill="rgb(244,155,41)" height="15.0" rx="2" ry="2" width="1.5" x="1086.7" y="613"></rect>
+<text x="1089.72" y="623.5"></text>
+</g>
+<g>
+<title>kgghash (11 samples, 0.02%)</title><rect fill="rgb(208,14,37)" height="15.0" rx="2" ry="2" width="0.3" x="1101.7" y="533"></rect>
+<text x="1104.72" y="543.5"></text>
+</g>
+<g>
+<title>kdlwdb (178 samples, 0.32%)</title><rect fill="rgb(237,163,53)" height="15.0" rx="2" ry="2" width="3.8" x="1094.8" y="549"></rect>
+<text x="1097.81" y="559.5"></text>
+</g>
+<g>
+<title>kcbgcur (26 samples, 0.05%)</title><rect fill="rgb(248,127,20)" height="15.0" rx="2" ry="2" width="0.5" x="737.1" y="581"></rect>
+<text x="740.08" y="591.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (5 samples, 0.01%)</title><rect fill="rgb(242,225,3)" height="15.0" rx="2" ry="2" width="0.1" x="1071.0" y="741"></rect>
+<text x="1073.97" y="751.5"></text>
+</g>
+<g>
+<title>kghalf (21 samples, 0.04%)</title><rect fill="rgb(243,56,2)" height="15.0" rx="2" ry="2" width="0.4" x="1102.0" y="549"></rect>
+<text x="1104.95" y="559.5"></text>
+</g>
+<g>
+<title>kspgip (6 samples, 0.01%)</title><rect fill="rgb(229,228,27)" height="15.0" rx="2" ry="2" width="0.1" x="1103.6" y="773"></rect>
+<text x="1106.56" y="783.5"></text>
+</g>
+<g>
+<title>kolrghte (5 samples, 0.01%)</title><rect fill="rgb(244,184,45)" height="15.0" rx="2" ry="2" width="0.1" x="12.8" y="757"></rect>
+<text x="15.75" y="767.5"></text>
+</g>
+<g>
+<title>kokavpr (23 samples, 0.04%)</title><rect fill="rgb(250,8,28)" height="15.0" rx="2" ry="2" width="0.5" x="1090.6" y="613"></rect>
+<text x="1093.62" y="623.5"></text>
+</g>
+<g>
+<title>kxstTraceWait (22 samples, 0.04%)</title><rect fill="rgb(236,18,44)" height="15.0" rx="2" ry="2" width="0.4" x="1100.5" y="293"></rect>
+<text x="1103.45" y="303.5"></text>
+</g>
+<g>
+<title>kole_t2u (8 samples, 0.01%)</title><rect fill="rgb(230,137,7)" height="15.0" rx="2" ry="2" width="0.2" x="961.4" y="693"></rect>
+<text x="964.42" y="703.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (14 samples, 0.03%)</title><rect fill="rgb(242,143,54)" height="15.0" rx="2" ry="2" width="0.3" x="950.4" y="613"></rect>
+<text x="953.44" y="623.5"></text>
+</g>
+<g>
+<title>kxsdmc (44,967 samples, 80.75%)</title><rect fill="rgb(232,195,42)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="949"></rect>
+<text x="14.00" y="959.5">kxsdmc</text>
+</g>
+<g>
+<title>kghalf (41 samples, 0.07%)</title><rect fill="rgb(239,217,4)" height="15.0" rx="2" ry="2" width="0.9" x="1084.0" y="709"></rect>
+<text x="1086.99" y="719.5"></text>
+</g>
+<g>
+<title>kghalo (35 samples, 0.06%)</title><rect fill="rgb(233,56,20)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="421"></rect>
+<text x="1103.17" y="431.5"></text>
+</g>
+<g>
+<title>ktbchgro (138 samples, 0.25%)</title><rect fill="rgb(252,200,15)" height="15.0" rx="2" ry="2" width="2.9" x="1095.7" y="533"></rect>
+<text x="1098.66" y="543.5"></text>
+</g>
+<g>
+<title>schedule (17 samples, 0.03%)</title><rect fill="rgb(226,90,12)" height="15.0" rx="2" ry="2" width="0.4" x="950.7" y="613"></rect>
+<text x="953.74" y="623.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (12 samples, 0.02%)</title><rect fill="rgb(218,207,22)" height="15.0" rx="2" ry="2" width="0.3" x="1161.8" y="837"></rect>
+<text x="1164.82" y="847.5"></text>
+</g>
+<g>
+<title>kgghstine_wfp (30 samples, 0.05%)</title><rect fill="rgb(246,169,19)" height="15.0" rx="2" ry="2" width="0.7" x="1083.3" y="709"></rect>
+<text x="1086.35" y="719.5"></text>
+</g>
+<g>
+<title>ktbchgro (12 samples, 0.02%)</title><rect fill="rgb(247,169,33)" height="15.0" rx="2" ry="2" width="0.2" x="1094.0" y="453"></rect>
+<text x="1096.99" y="463.5"></text>
+</g>
+<g>
+<title>pfrrun (55,610 samples, 99.86%)</title><rect fill="rgb(215,214,52)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1237"></rect>
+<text x="13.78" y="1247.5">pfrrun</text>
+</g>
+<g>
+<title>do_page_fault (6 samples, 0.01%)</title><rect fill="rgb(243,56,52)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="309"></rect>
+<text x="1103.22" y="319.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (39 samples, 0.07%)</title><rect fill="rgb(210,180,28)" height="15.0" rx="2" ry="2" width="0.8" x="248.5" y="661"></rect>
+<text x="251.45" y="671.5"></text>
+</g>
+<g>
+<title>kokasuc (619 samples, 1.11%)</title><rect fill="rgb(217,53,10)" height="15.0" rx="2" ry="2" width="13.1" x="1089.9" y="725"></rect>
+<text x="1092.88" y="735.5"></text>
+</g>
+<g>
+<title>irq_exit (5 samples, 0.01%)</title><rect fill="rgb(222,208,37)" height="15.0" rx="2" ry="2" width="0.1" x="1071.0" y="709"></rect>
+<text x="1073.97" y="719.5"></text>
+</g>
+<g>
+<title>tlb_flush_mmu_free (7 samples, 0.01%)</title><rect fill="rgb(224,160,41)" height="15.0" rx="2" ry="2" width="0.2" x="1189.4" y="1285"></rect>
+<text x="1192.41" y="1295.5"></text>
+</g>
+<g>
+<title>get_page_from_freelist (7 samples, 0.01%)</title><rect fill="rgb(213,34,10)" height="15.0" rx="2" ry="2" width="0.1" x="1087.9" y="453"></rect>
+<text x="1090.86" y="463.5"></text>
+</g>
+<g>
+<title>kolrgrfc2 (23 samples, 0.04%)</title><rect fill="rgb(207,45,21)" height="15.0" rx="2" ry="2" width="0.4" x="11.3" y="837"></rect>
+<text x="14.25" y="847.5"></text>
+</g>
+<g>
+<title>do_page_fault (61 samples, 0.11%)</title><rect fill="rgb(218,160,34)" height="15.0" rx="2" ry="2" width="1.2" x="1087.0" y="565"></rect>
+<text x="1089.95" y="575.5"></text>
+</g>
+<g>
+<title>kghfnd (35 samples, 0.06%)</title><rect fill="rgb(236,165,31)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="405"></rect>
+<text x="1103.17" y="415.5"></text>
+</g>
+<g>
+<title>kcbgcur (8 samples, 0.01%)</title><rect fill="rgb(234,121,28)" height="15.0" rx="2" ry="2" width="0.2" x="1094.6" y="453"></rect>
+<text x="1097.60" y="463.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (37 samples, 0.07%)</title><rect fill="rgb(224,87,18)" height="15.0" rx="2" ry="2" width="0.8" x="950.3" y="645"></rect>
+<text x="953.34" y="655.5"></text>
+</g>
+<g>
+<title>__dta_xfs_file_buffered_aio_write_3297 (17 samples, 0.03%)</title><rect fill="rgb(230,195,46)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="213"></rect>
+<text x="1092.01" y="223.5"></text>
+</g>
+<g>
+<title>_setjmp (5 samples, 0.01%)</title><rect fill="rgb(243,215,52)" height="15.0" rx="2" ry="2" width="0.1" x="11.1" y="853"></rect>
+<text x="14.06" y="863.5"></text>
+</g>
+<g>
+<title>skgmrf_alloc (50 samples, 0.09%)</title><rect fill="rgb(247,94,51)" height="15.0" rx="2" ry="2" width="1.1" x="1088.6" y="485"></rect>
+<text x="1091.60" y="495.5"></text>
+</g>
+<g>
+<title>dbgtRecVAWriteDisk (19 samples, 0.03%)</title><rect fill="rgb(239,59,50)" height="15.0" rx="2" ry="2" width="0.4" x="1100.5" y="245"></rect>
+<text x="1103.51" y="255.5"></text>
+</g>
+<g>
+<title>kokegPinLob (5,451 samples, 9.79%)</title><rect fill="rgb(247,72,40)" height="15.0" rx="2" ry="2" width="115.6" x="965.0" y="789"></rect>
+<text x="968.04" y="799.5">kokegPinLob</text>
+</g>
+<g>
+<title>__do_page_fault (9 samples, 0.02%)</title><rect fill="rgb(254,203,11)" height="15.0" rx="2" ry="2" width="0.2" x="1088.3" y="453"></rect>
+<text x="1091.31" y="463.5"></text>
+</g>
+<g>
+<title>kdlrsp (5 samples, 0.01%)</title><rect fill="rgb(228,50,33)" height="15.0" rx="2" ry="2" width="0.1" x="1093.4" y="565"></rect>
+<text x="1096.44" y="575.5"></text>
+</g>
+<g>
+<title>__schedule (21 samples, 0.04%)</title><rect fill="rgb(222,205,43)" height="15.0" rx="2" ry="2" width="0.5" x="722.6" y="581"></rect>
+<text x="725.63" y="591.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (10,942 samples, 19.65%)</title><rect fill="rgb(233,120,51)" height="15.0" rx="2" ry="2" width="231.9" x="491.2" y="661"></rect>
+<text x="494.21" y="671.5">_intel_fast_memcmp</text>
+</g>
+<g>
+<title>kgghstfel_wfp (13 samples, 0.02%)</title><rect fill="rgb(244,191,27)" height="15.0" rx="2" ry="2" width="0.3" x="1106.3" y="789"></rect>
+<text x="1109.28" y="799.5"></text>
+</g>
+<g>
+<title>kohalmc (6 samples, 0.01%)</title><rect fill="rgb(245,198,50)" height="15.0" rx="2" ry="2" width="0.1" x="1083.2" y="661"></rect>
+<text x="1086.18" y="671.5"></text>
+</g>
+<g>
+<title>kohfrr (13 samples, 0.02%)</title><rect fill="rgb(241,82,18)" height="15.0" rx="2" ry="2" width="0.3" x="962.0" y="693"></rect>
+<text x="965.01" y="703.5"></text>
+</g>
+<g>
+<title>kdltfindctl (499 samples, 0.90%)</title><rect fill="rgb(249,186,31)" height="15.0" rx="2" ry="2" width="10.6" x="480.5" y="661"></rect>
+<text x="483.51" y="671.5"></text>
+</g>
+<g>
+<title>kollalop (14 samples, 0.03%)</title><rect fill="rgb(247,106,42)" height="15.0" rx="2" ry="2" width="0.3" x="962.3" y="725"></rect>
+<text x="965.31" y="735.5"></text>
+</g>
+<g>
+<title>opiodr (55,607 samples, 99.86%)</title><rect fill="rgb(245,71,34)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1061"></rect>
+<text x="13.83" y="1071.5">opiodr</text>
+</g>
+<g>
+<title>kghalf (5 samples, 0.01%)</title><rect fill="rgb(206,64,22)" height="15.0" rx="2" ry="2" width="0.1" x="1101.3" y="533"></rect>
+<text x="1104.28" y="543.5"></text>
+</g>
+<g>
+<title>kohalw (8 samples, 0.01%)</title><rect fill="rgb(210,174,7)" height="15.0" rx="2" ry="2" width="0.2" x="1104.3" y="869"></rect>
+<text x="1107.33" y="879.5"></text>
+</g>
+<g>
+<title>kcbinvbrhb (6 samples, 0.01%)</title><rect fill="rgb(251,173,28)" height="15.0" rx="2" ry="2" width="0.1" x="735.1" y="629"></rect>
+<text x="738.09" y="639.5"></text>
+</g>
+<g>
+<title>__dta_xfs_file_aio_write_checks_3294 (13 samples, 0.02%)</title><rect fill="rgb(231,71,40)" height="15.0" rx="2" ry="2" width="0.3" x="1089.0" y="197"></rect>
+<text x="1092.01" y="207.5"></text>
+</g>
+<g>
+<title>kghalo (83 samples, 0.15%)</title><rect fill="rgb(252,60,48)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="469"></rect>
+<text x="1102.20" y="479.5"></text>
+</g>
+<g>
+<title>qmuhshput (1,036 samples, 1.86%)</title><rect fill="rgb(228,135,42)" height="15.0" rx="2" ry="2" width="22.0" x="1058.6" y="773"></rect>
+<text x="1061.60" y="783.5">q..</text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (37 samples, 0.07%)</title><rect fill="rgb(240,126,21)" height="15.0" rx="2" ry="2" width="0.8" x="950.3" y="661"></rect>
+<text x="953.34" y="671.5"></text>
+</g>
+<g>
+<title>kghfnd_get_extent (156 samples, 0.28%)</title><rect fill="rgb(220,1,11)" height="15.0" rx="2" ry="2" width="3.3" x="1086.5" y="693"></rect>
+<text x="1089.46" y="703.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (5 samples, 0.01%)</title><rect fill="rgb(206,158,25)" height="15.0" rx="2" ry="2" width="0.2" x="961.8" y="677"></rect>
+<text x="964.84" y="687.5"></text>
+</g>
+<g>
+<title>kdltfindctl (512 samples, 0.92%)</title><rect fill="rgb(223,159,7)" height="15.0" rx="2" ry="2" width="10.8" x="249.3" y="693"></rect>
+<text x="252.28" y="703.5"></text>
+</g>
+<g>
+<title>ktsbbset (13 samples, 0.02%)</title><rect fill="rgb(222,67,40)" height="15.0" rx="2" ry="2" width="0.2" x="1094.0" y="469"></rect>
+<text x="1096.97" y="479.5"></text>
+</g>
+<g>
+<title>finish_task_switch (15 samples, 0.03%)</title><rect fill="rgb(245,153,18)" height="15.0" rx="2" ry="2" width="0.3" x="950.8" y="581"></rect>
+<text x="953.78" y="591.5"></text>
+</g>
+<g>
+<title>koklc_length (37 samples, 0.07%)</title><rect fill="rgb(233,36,3)" height="15.0" rx="2" ry="2" width="0.8" x="1080.9" y="789"></rect>
+<text x="1083.91" y="799.5"></text>
+</g>
+<g>
+<title>__vfs_write (5 samples, 0.01%)</title><rect fill="rgb(252,99,35)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="69"></rect>
+<text x="1103.75" y="79.5"></text>
+</g>
+<g>
+<title>kcbchg1 (138 samples, 0.25%)</title><rect fill="rgb(220,119,19)" height="15.0" rx="2" ry="2" width="2.9" x="1095.7" y="517"></rect>
+<text x="1098.66" y="527.5"></text>
+</g>
+<g>
+<title>kghfnd (83 samples, 0.15%)</title><rect fill="rgb(216,71,2)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="501"></rect>
+<text x="1102.20" y="511.5"></text>
+</g>
+<g>
+<title>kokltcr (75 samples, 0.13%)</title><rect fill="rgb(233,163,54)" height="15.0" rx="2" ry="2" width="1.6" x="1101.2" y="581"></rect>
+<text x="1104.23" y="591.5"></text>
+</g>
+<g>
+<title>kghfrf (6 samples, 0.01%)</title><rect fill="rgb(236,38,35)" height="15.0" rx="2" ry="2" width="0.1" x="963.4" y="757"></rect>
+<text x="966.39" y="767.5"></text>
+</g>
+<g>
+<title>ktsbdba_vbn (26 samples, 0.05%)</title><rect fill="rgb(242,143,54)" height="15.0" rx="2" ry="2" width="0.6" x="736.4" y="645"></rect>
+<text x="739.42" y="655.5"></text>
+</g>
+<g>
+<title>alloc_pages_vma (12 samples, 0.02%)</title><rect fill="rgb(254,125,46)" height="15.0" rx="2" ry="2" width="0.2" x="1087.8" y="485"></rect>
+<text x="1090.76" y="495.5"></text>
+</g>
+<g>
+<title>kolrghte (6 samples, 0.01%)</title><rect fill="rgb(253,50,29)" height="15.0" rx="2" ry="2" width="0.2" x="961.8" y="693"></rect>
+<text x="964.82" y="703.5"></text>
+</g>
+<g>
+<title>kghgex (66 samples, 0.12%)</title><rect fill="rgb(216,190,37)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="549"></rect>
+<text x="1091.27" y="559.5"></text>
+</g>
+<g>
+<title>evaopn2 (6,532 samples, 11.73%)</title><rect fill="rgb(242,217,22)" height="15.0" rx="2" ry="2" width="138.4" x="964.9" y="837"></rect>
+<text x="967.90" y="847.5">evaopn2</text>
+</g>
+<g>
+<title>kaf_typed_stuff (8 samples, 0.01%)</title><rect fill="rgb(237,51,29)" height="15.0" rx="2" ry="2" width="0.2" x="964.4" y="853"></rect>
+<text x="967.39" y="863.5"></text>
+</g>
+<g>
+<title>irq_exit (9 samples, 0.02%)</title><rect fill="rgb(212,87,10)" height="15.0" rx="2" ry="2" width="0.2" x="1161.6" y="821"></rect>
+<text x="1164.63" y="831.5"></text>
+</g>
+<g>
+<title>koklSurrCheck (30 samples, 0.05%)</title><rect fill="rgb(240,157,50)" height="15.0" rx="2" ry="2" width="0.6" x="1092.2" y="581"></rect>
+<text x="1095.21" y="591.5"></text>
+</g>
+<g>
+<title>kolttfr (17 samples, 0.03%)</title><rect fill="rgb(251,227,10)" height="15.0" rx="2" ry="2" width="0.4" x="1105.2" y="853"></rect>
+<text x="1108.24" y="863.5"></text>
+</g>
+<g>
+<title>__do_softirq (38 samples, 0.07%)</title><rect fill="rgb(253,220,17)" height="15.0" rx="2" ry="2" width="0.9" x="478.7" y="597"></rect>
+<text x="481.75" y="607.5"></text>
+</g>
+<g>
+<title>ktsbbscn (18 samples, 0.03%)</title><rect fill="rgb(209,128,8)" height="15.0" rx="2" ry="2" width="0.4" x="1093.9" y="501"></rect>
+<text x="1096.88" y="511.5"></text>
+</g>
+<g>
+<title>kghfrf (6 samples, 0.01%)</title><rect fill="rgb(235,51,3)" height="15.0" rx="2" ry="2" width="0.1" x="963.5" y="773"></rect>
+<text x="966.52" y="783.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (38 samples, 0.07%)</title><rect fill="rgb(234,18,42)" height="15.0" rx="2" ry="2" width="0.9" x="478.7" y="645"></rect>
+<text x="481.75" y="655.5"></text>
+</g>
+<g>
+<title>kpmdurend (44,967 samples, 80.75%)</title><rect fill="rgb(209,20,5)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="933"></rect>
+<text x="14.00" y="943.5">kpmdurend</text>
+</g>
+<g>
+<title>kghfnd (36 samples, 0.06%)</title><rect fill="rgb(250,92,16)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="453"></rect>
+<text x="1103.17" y="463.5"></text>
+</g>
+<g>
+<title>do_syscall_64 (17 samples, 0.03%)</title><rect fill="rgb(251,131,9)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="293"></rect>
+<text x="1092.01" y="303.5"></text>
+</g>
+<g>
+<title>dbgtTrc_int (40 samples, 0.07%)</title><rect fill="rgb(248,199,45)" height="15.0" rx="2" ry="2" width="0.9" x="1088.7" y="437"></rect>
+<text x="1091.71" y="447.5"></text>
+</g>
+<g>
+<title>kolaFree_rfc (17 samples, 0.03%)</title><rect fill="rgb(220,33,5)" height="15.0" rx="2" ry="2" width="0.4" x="1105.2" y="821"></rect>
+<text x="1108.24" y="831.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (6 samples, 0.01%)</title><rect fill="rgb(208,35,48)" height="15.0" rx="2" ry="2" width="0.2" x="1106.4" y="773"></rect>
+<text x="1109.43" y="783.5"></text>
+</g>
+<g>
+<title>kcbchg1_main (27 samples, 0.05%)</title><rect fill="rgb(254,125,35)" height="15.0" rx="2" ry="2" width="0.5" x="735.8" y="613"></rect>
+<text x="738.77" y="623.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (2,998 samples, 5.38%)</title><rect fill="rgb(247,138,3)" height="15.0" rx="2" ry="2" width="63.6" x="965.2" y="757"></rect>
+<text x="968.24" y="767.5">_intel..</text>
+</g>
+<g>
+<title>kolrgrfc (9 samples, 0.02%)</title><rect fill="rgb(240,167,16)" height="15.0" rx="2" ry="2" width="0.2" x="1105.4" y="805"></rect>
+<text x="1108.41" y="815.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (22 samples, 0.04%)</title><rect fill="rgb(232,115,2)" height="15.0" rx="2" ry="2" width="0.4" x="11.3" y="805"></rect>
+<text x="14.27" y="815.5"></text>
+</g>
+<g>
+<title>kohalw (5 samples, 0.01%)</title><rect fill="rgb(220,126,24)" height="15.0" rx="2" ry="2" width="0.1" x="1101.0" y="613"></rect>
+<text x="1104.04" y="623.5"></text>
+</g>
+<g>
+<title>kokacau (20 samples, 0.04%)</title><rect fill="rgb(210,21,9)" height="15.0" rx="2" ry="2" width="0.4" x="1090.7" y="581"></rect>
+<text x="1093.66" y="591.5"></text>
+</g>
+<g>
+<title>__do_softirq (7 samples, 0.01%)</title><rect fill="rgb(214,58,39)" height="15.0" rx="2" ry="2" width="0.1" x="1058.2" y="693"></rect>
+<text x="1061.15" y="703.5"></text>
+</g>
+<g>
+<title>opitsk (55,631 samples, 99.90%)</title><rect fill="rgb(247,216,13)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1365"></rect>
+<text x="13.34" y="1375.5">opitsk</text>
+</g>
+<g>
+<title>_dl_addr (7 samples, 0.01%)</title><rect fill="rgb(229,16,14)" height="15.0" rx="2" ry="2" width="0.1" x="1189.9" y="1493"></rect>
+<text x="1192.85" y="1503.5"></text>
+</g>
+<g>
+<title>kollas2 (60 samples, 0.11%)</title><rect fill="rgb(210,74,53)" height="15.0" rx="2" ry="2" width="1.3" x="1104.3" y="885"></rect>
+<text x="1107.33" y="895.5"></text>
+</g>
+<g>
+<title>pfrinstr_BFTCHC (55,607 samples, 99.86%)</title><rect fill="rgb(252,76,47)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1205"></rect>
+<text x="13.83" y="1215.5">pfrinstr_BFTCHC</text>
+</g>
+<g>
+<title>kolaFree (44,931 samples, 80.69%)</title><rect fill="rgb(231,33,25)" height="15.0" rx="2" ry="2" width="952.1" x="11.8" y="821"></rect>
+<text x="14.76" y="831.5">kolaFree</text>
+</g>
+<g>
+<title>vfs_write (17 samples, 0.03%)</title><rect fill="rgb(250,100,15)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="261"></rect>
+<text x="1092.01" y="271.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (8 samples, 0.01%)</title><rect fill="rgb(250,169,7)" height="15.0" rx="2" ry="2" width="0.2" x="1188.6" y="853"></rect>
+<text x="1191.60" y="863.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (6 samples, 0.01%)</title><rect fill="rgb(247,176,7)" height="15.0" rx="2" ry="2" width="0.2" x="1058.3" y="693"></rect>
+<text x="1061.32" y="703.5"></text>
+</g>
+<g>
+<title>kghgex (86 samples, 0.15%)</title><rect fill="rgb(227,32,29)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="533"></rect>
+<text x="1102.16" y="543.5"></text>
+</g>
+<g>
+<title>kghssgmm (90 samples, 0.16%)</title><rect fill="rgb(250,70,13)" height="15.0" rx="2" ry="2" width="1.9" x="1099.1" y="613"></rect>
+<text x="1102.07" y="623.5"></text>
+</g>
+<g>
+<title>__write_nocancel (5 samples, 0.01%)</title><rect fill="rgb(246,90,29)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="165"></rect>
+<text x="1103.62" y="175.5"></text>
+</g>
+<g>
+<title>kolrgrfc (5 samples, 0.01%)</title><rect fill="rgb(235,50,0)" height="15.0" rx="2" ry="2" width="0.1" x="1103.7" y="805"></rect>
+<text x="1106.69" y="815.5"></text>
+</g>
+<g>
+<title>kcbchg1_main (12 samples, 0.02%)</title><rect fill="rgb(237,189,32)" height="15.0" rx="2" ry="2" width="0.2" x="1094.0" y="421"></rect>
+<text x="1096.99" y="431.5"></text>
+</g>
+<g>
+<title>kssadf_numa_intl (7 samples, 0.01%)</title><rect fill="rgb(233,71,48)" height="15.0" rx="2" ry="2" width="0.1" x="737.5" y="549"></rect>
+<text x="740.48" y="559.5"></text>
+</g>
+<g>
+<title>qmuhsh_get (4,406 samples, 7.91%)</title><rect fill="rgb(237,229,2)" height="15.0" rx="2" ry="2" width="93.4" x="965.2" y="773"></rect>
+<text x="968.24" y="783.5">qmuhsh_get</text>
+</g>
+<g>
+<title>run_timer_softirq (7 samples, 0.01%)</title><rect fill="rgb(212,196,5)" height="15.0" rx="2" ry="2" width="0.1" x="248.3" y="613"></rect>
+<text x="251.26" y="623.5"></text>
+</g>
+<g>
+<title>kdltfindctl (556 samples, 1.00%)</title><rect fill="rgb(247,137,36)" height="15.0" rx="2" ry="2" width="11.8" x="723.1" y="661"></rect>
+<text x="726.12" y="671.5"></text>
+</g>
+<g>
+<title>rpidru (55,607 samples, 99.86%)</title><rect fill="rgb(227,68,6)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1109"></rect>
+<text x="13.83" y="1119.5">rpidru</text>
+</g>
+<g>
+<title>kcbzfb (9 samples, 0.02%)</title><rect fill="rgb(242,32,13)" height="15.0" rx="2" ry="2" width="0.2" x="1095.4" y="501"></rect>
+<text x="1098.39" y="511.5"></text>
+</g>
+<g>
+<title>koklpgszCbk (52 samples, 0.09%)</title><rect fill="rgb(239,54,12)" height="15.0" rx="2" ry="2" width="1.1" x="1090.3" y="645"></rect>
+<text x="1093.28" y="655.5"></text>
+</g>
+<g>
+<title>__schedule (21 samples, 0.04%)</title><rect fill="rgb(249,128,41)" height="15.0" rx="2" ry="2" width="0.5" x="248.8" y="613"></rect>
+<text x="251.84" y="623.5"></text>
+</g>
+<g>
+<title>get_page_from_freelist (7 samples, 0.01%)</title><rect fill="rgb(229,204,11)" height="15.0" rx="2" ry="2" width="0.1" x="1099.8" y="293"></rect>
+<text x="1102.75" y="303.5"></text>
+</g>
+<g>
+<title>kghalo (66 samples, 0.12%)</title><rect fill="rgb(235,94,10)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="581"></rect>
+<text x="1091.27" y="591.5"></text>
+</g>
+<g>
+<title>vfs_write (5 samples, 0.01%)</title><rect fill="rgb(239,74,13)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="85"></rect>
+<text x="1103.75" y="95.5"></text>
+</g>
+<g>
+<title>file_update_time (13 samples, 0.02%)</title><rect fill="rgb(216,23,14)" height="15.0" rx="2" ry="2" width="0.3" x="1089.0" y="181"></rect>
+<text x="1092.01" y="191.5"></text>
+</g>
+<g>
+<title>opifch (55,602 samples, 99.85%)</title><rect fill="rgb(227,54,22)" height="15.0" rx="2" ry="2" width="1178.2" x="10.9" y="1029"></rect>
+<text x="13.91" y="1039.5">opifch</text>
+</g>
+<g>
+<title>entry_SYSCALL_64_after_hwframe (31 samples, 0.06%)</title><rect fill="rgb(241,76,41)" height="15.0" rx="2" ry="2" width="0.7" x="1189.2" y="1477"></rect>
+<text x="1192.19" y="1487.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (28 samples, 0.05%)</title><rect fill="rgb(235,51,34)" height="15.0" rx="2" ry="2" width="0.6" x="721.6" y="629"></rect>
+<text x="724.59" y="639.5"></text>
+</g>
+<g>
+<title>koklpgsz (21 samples, 0.04%)</title><rect fill="rgb(209,127,25)" height="15.0" rx="2" ry="2" width="0.4" x="1092.4" y="565"></rect>
+<text x="1095.38" y="575.5"></text>
+</g>
+<g>
+<title>_IO_vsnprintf (9 samples, 0.02%)</title><rect fill="rgb(207,91,45)" height="15.0" rx="2" ry="2" width="0.2" x="10.1" y="1477"></rect>
+<text x="13.08" y="1487.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (10 samples, 0.02%)</title><rect fill="rgb(205,213,21)" height="15.0" rx="2" ry="2" width="0.2" x="1105.0" y="821"></rect>
+<text x="1108.03" y="831.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (45 samples, 0.08%)</title><rect fill="rgb(229,144,51)" height="15.0" rx="2" ry="2" width="0.9" x="479.6" y="629"></rect>
+<text x="482.55" y="639.5"></text>
+</g>
+<g>
+<title>kghgex (35 samples, 0.06%)</title><rect fill="rgb(239,99,44)" height="15.0" rx="2" ry="2" width="0.7" x="1100.2" y="389"></rect>
+<text x="1103.17" y="399.5"></text>
+</g>
+<g>
+<title>kpdbUidToId (7 samples, 0.01%)</title><rect fill="rgb(245,5,50)" height="15.0" rx="2" ry="2" width="0.1" x="1090.9" y="565"></rect>
+<text x="1093.89" y="575.5"></text>
+</g>
+<g>
+<title>koklc_pagesize (58 samples, 0.10%)</title><rect fill="rgb(245,198,52)" height="15.0" rx="2" ry="2" width="1.2" x="1090.2" y="677"></rect>
+<text x="1093.15" y="687.5"></text>
+</g>
+<g>
+<title>kdli_iread (8 samples, 0.01%)</title><rect fill="rgb(234,10,17)" height="15.0" rx="2" ry="2" width="0.2" x="1081.0" y="725"></rect>
+<text x="1084.02" y="735.5"></text>
+</g>
+<g>
+<title>psdnal (55,607 samples, 99.86%)</title><rect fill="rgb(212,120,43)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1173"></rect>
+<text x="13.83" y="1183.5">psdnal</text>
+</g>
+<g>
+<title>kghgex (83 samples, 0.15%)</title><rect fill="rgb(244,137,33)" height="15.0" rx="2" ry="2" width="1.8" x="1099.2" y="485"></rect>
+<text x="1102.20" y="495.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (13 samples, 0.02%)</title><rect fill="rgb(227,46,49)" height="15.0" rx="2" ry="2" width="0.3" x="248.5" y="629"></rect>
+<text x="251.52" y="639.5"></text>
+</g>
+<g>
+<title>kghuwrlength (5 samples, 0.01%)</title><rect fill="rgb(223,66,30)" height="15.0" rx="2" ry="2" width="0.1" x="963.1" y="709"></rect>
+<text x="966.14" y="719.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (10,369 samples, 18.62%)</title><rect fill="rgb(225,72,38)" height="15.0" rx="2" ry="2" width="219.7" x="260.8" y="661"></rect>
+<text x="263.79" y="671.5">_intel_fast_memcmp</text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (15 samples, 0.03%)</title><rect fill="rgb(233,165,33)" height="15.0" rx="2" ry="2" width="0.4" x="1028.4" y="741"></rect>
+<text x="1031.45" y="751.5"></text>
+</g>
+<g>
+<title>koklglen (37 samples, 0.07%)</title><rect fill="rgb(248,34,44)" height="15.0" rx="2" ry="2" width="0.8" x="1080.9" y="773"></rect>
+<text x="1083.91" y="783.5"></text>
+</g>
+<g>
+<title>qmuhshget_internal (1,233 samples, 2.21%)</title><rect fill="rgb(223,170,12)" height="15.0" rx="2" ry="2" width="26.1" x="1162.1" y="869"></rect>
+<text x="1165.07" y="879.5">q..</text>
+</g>
+<g>
+<title>opiexe (55,610 samples, 99.86%)</title><rect fill="rgb(228,146,6)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1301"></rect>
+<text x="13.78" y="1311.5">opiexe</text>
+</g>
+<g>
+<title>kgghstfel_wfp (9 samples, 0.02%)</title><rect fill="rgb(254,14,42)" height="15.0" rx="2" ry="2" width="0.2" x="1104.6" y="805"></rect>
+<text x="1107.60" y="815.5"></text>
+</g>
+<g>
+<title>do_async_page_fault (61 samples, 0.11%)</title><rect fill="rgb(206,53,4)" height="15.0" rx="2" ry="2" width="1.2" x="1087.0" y="581"></rect>
+<text x="1089.95" y="591.5"></text>
+</g>
+<g>
+<title>kprcdt (63 samples, 0.11%)</title><rect fill="rgb(229,82,36)" height="15.0" rx="2" ry="2" width="1.3" x="1104.3" y="901"></rect>
+<text x="1107.26" y="911.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (9 samples, 0.02%)</title><rect fill="rgb(241,96,54)" height="15.0" rx="2" ry="2" width="0.2" x="1161.6" y="853"></rect>
+<text x="1164.63" y="863.5"></text>
+</g>
+<g>
+<title>clear_page_erms (5 samples, 0.01%)</title><rect fill="rgb(246,144,32)" height="15.0" rx="2" ry="2" width="0.1" x="1087.8" y="453"></rect>
+<text x="1090.76" y="463.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (15 samples, 0.03%)</title><rect fill="rgb(236,144,54)" height="15.0" rx="2" ry="2" width="0.4" x="1028.4" y="709"></rect>
+<text x="1031.45" y="719.5"></text>
+</g>
+<g>
+<title>do_async_page_fault (6 samples, 0.01%)</title><rect fill="rgb(211,224,29)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="325"></rect>
+<text x="1103.22" y="335.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (10 samples, 0.02%)</title><rect fill="rgb(237,188,4)" height="15.0" rx="2" ry="2" width="0.2" x="1028.2" y="741"></rect>
+<text x="1031.23" y="751.5"></text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (10 samples, 0.02%)</title><rect fill="rgb(221,39,50)" height="15.0" rx="2" ry="2" width="0.2" x="1028.2" y="725"></rect>
+<text x="1031.23" y="735.5"></text>
+</g>
+<g>
+<title>__do_softirq (28 samples, 0.05%)</title><rect fill="rgb(221,10,37)" height="15.0" rx="2" ry="2" width="0.6" x="721.6" y="597"></rect>
+<text x="724.59" y="607.5"></text>
+</g>
+<g>
+<title>ktcsna (8 samples, 0.01%)</title><rect fill="rgb(243,179,25)" height="15.0" rx="2" ry="2" width="0.2" x="737.9" y="677"></rect>
+<text x="740.95" y="687.5"></text>
+</g>
+<g>
+<title>__do_softirq (5 samples, 0.01%)</title><rect fill="rgb(211,47,46)" height="15.0" rx="2" ry="2" width="0.1" x="1080.4" y="693"></rect>
+<text x="1083.43" y="703.5"></text>
+</g>
+<g>
+<title>koklc_sysparam (6 samples, 0.01%)</title><rect fill="rgb(210,214,34)" height="15.0" rx="2" ry="2" width="0.1" x="1103.6" y="789"></rect>
+<text x="1106.56" y="799.5"></text>
+</g>
+<g>
+<title>kghfrempty_sh_all_depth (19 samples, 0.03%)</title><rect fill="rgb(227,95,4)" height="15.0" rx="2" ry="2" width="0.4" x="10.4" y="1221"></rect>
+<text x="13.38" y="1231.5"></text>
+</g>
+<g>
+<title>kohedu (44,967 samples, 80.75%)</title><rect fill="rgb(228,70,22)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="917"></rect>
+<text x="14.00" y="927.5">kohedu</text>
+</g>
+<g>
+<title>skgmrf_alloc (26 samples, 0.05%)</title><rect fill="rgb(210,200,3)" height="15.0" rx="2" ry="2" width="0.5" x="1100.4" y="325"></rect>
+<text x="1103.37" y="335.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (5 samples, 0.01%)</title><rect fill="rgb(232,142,49)" height="15.0" rx="2" ry="2" width="0.1" x="1080.4" y="741"></rect>
+<text x="1083.43" y="751.5"></text>
+</g>
+<g>
+<title>kollfrfn (14 samples, 0.03%)</title><rect fill="rgb(246,158,26)" height="15.0" rx="2" ry="2" width="0.3" x="962.0" y="725"></rect>
+<text x="964.99" y="735.5"></text>
+</g>
+<g>
+<title>kolrde_free (17 samples, 0.03%)</title><rect fill="rgb(231,84,50)" height="15.0" rx="2" ry="2" width="0.3" x="962.9" y="757"></rect>
+<text x="965.88" y="767.5"></text>
+</g>
+<g>
+<title>kcoapl (14 samples, 0.03%)</title><rect fill="rgb(248,106,4)" height="15.0" rx="2" ry="2" width="0.3" x="736.0" y="597"></rect>
+<text x="739.02" y="607.5"></text>
+</g>
+<g>
+<title>__intel_new_memset (14 samples, 0.03%)</title><rect fill="rgb(219,125,21)" height="15.0" rx="2" ry="2" width="0.3" x="260.4" y="677"></rect>
+<text x="263.36" y="687.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (35 samples, 0.06%)</title><rect fill="rgb(249,62,3)" height="15.0" rx="2" ry="2" width="0.7" x="1084.9" y="693"></rect>
+<text x="1087.85" y="703.5"></text>
+</g>
+<g>
+<title>ktecgshx (11 samples, 0.02%)</title><rect fill="rgb(221,225,40)" height="15.0" rx="2" ry="2" width="0.2" x="1094.6" y="501"></rect>
+<text x="1097.58" y="511.5"></text>
+</g>
+<g>
+<title>kohdee (44,967 samples, 80.75%)</title><rect fill="rgb(248,155,7)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="901"></rect>
+<text x="14.00" y="911.5">kohdee</text>
+</g>
+<g>
+<title>kokegCollectGarbageFromScalar (3,859 samples, 6.93%)</title><rect fill="rgb(214,124,27)" height="15.0" rx="2" ry="2" width="81.7" x="1107.1" y="917"></rect>
+<text x="1110.06" y="927.5">kokegColl..</text>
+</g>
+<g>
+<title>ktsbfsp (121 samples, 0.22%)</title><rect fill="rgb(210,181,7)" height="15.0" rx="2" ry="2" width="2.6" x="735.3" y="661"></rect>
+<text x="738.32" y="671.5"></text>
+</g>
+<g>
+<title>dbgtfmWriteMetadata (9 samples, 0.02%)</title><rect fill="rgb(246,156,29)" height="15.0" rx="2" ry="2" width="0.2" x="1089.4" y="373"></rect>
+<text x="1092.37" y="383.5"></text>
+</g>
+<g>
+<title>handle_mm_fault (6 samples, 0.01%)</title><rect fill="rgb(205,71,52)" height="15.0" rx="2" ry="2" width="0.1" x="1088.4" y="437"></rect>
+<text x="1091.37" y="447.5"></text>
+</g>
+<g>
+<title>kco_issue_callback (6 samples, 0.01%)</title><rect fill="rgb(217,2,19)" height="15.0" rx="2" ry="2" width="0.1" x="736.1" y="581"></rect>
+<text x="739.10" y="591.5"></text>
+</g>
+<g>
+<title>xfs_file_write_iter (5 samples, 0.01%)</title><rect fill="rgb(230,49,43)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="53"></rect>
+<text x="1103.75" y="63.5"></text>
+</g>
+<g>
+<title>__alloc_pages_nodemask (12 samples, 0.02%)</title><rect fill="rgb(250,152,51)" height="15.0" rx="2" ry="2" width="0.2" x="1087.8" y="469"></rect>
+<text x="1090.76" y="479.5"></text>
+</g>
+<g>
+<title>ktsbvini (39 samples, 0.07%)</title><rect fill="rgb(235,171,22)" height="15.0" rx="2" ry="2" width="0.8" x="737.0" y="645"></rect>
+<text x="739.97" y="655.5"></text>
+</g>
+<g>
+<title>kafger (12 samples, 0.02%)</title><rect fill="rgb(253,151,36)" height="15.0" rx="2" ry="2" width="0.3" x="964.3" y="869"></rect>
+<text x="967.32" y="879.5"></text>
+</g>
+<g>
+<title>sys_write (17 samples, 0.03%)</title><rect fill="rgb(251,105,17)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="277"></rect>
+<text x="1092.01" y="287.5"></text>
+</g>
+<g>
+<title>__vfs_write (17 samples, 0.03%)</title><rect fill="rgb(211,76,50)" height="15.0" rx="2" ry="2" width="0.4" x="1089.0" y="245"></rect>
+<text x="1092.01" y="255.5"></text>
+</g>
+<g>
+<title>ktsbbfill (18 samples, 0.03%)</title><rect fill="rgb(207,161,6)" height="15.0" rx="2" ry="2" width="0.4" x="1093.9" y="485"></rect>
+<text x="1096.88" y="495.5"></text>
+</g>
+<g>
+<title>dbgtTrc_int (22 samples, 0.04%)</title><rect fill="rgb(206,193,43)" height="15.0" rx="2" ry="2" width="0.4" x="1100.5" y="277"></rect>
+<text x="1103.45" y="287.5"></text>
+</g>
+<g>
+<title>pfrrun_no_tool (55,610 samples, 99.86%)</title><rect fill="rgb(241,199,25)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1221"></rect>
+<text x="13.78" y="1231.5">pfrrun_no_tool</text>
+</g>
+<g>
+<title>kghaddex (5 samples, 0.01%)</title><rect fill="rgb(231,39,33)" height="15.0" rx="2" ry="2" width="0.1" x="1086.5" y="677"></rect>
+<text x="1089.51" y="687.5"></text>
+</g>
+<g>
+<title>kolrghte (17 samples, 0.03%)</title><rect fill="rgb(214,98,51)" height="15.0" rx="2" ry="2" width="0.4" x="1106.6" y="789"></rect>
+<text x="1109.60" y="799.5"></text>
+</g>
+<g>
+<title>kxstTraceWait (45 samples, 0.08%)</title><rect fill="rgb(209,23,17)" height="15.0" rx="2" ry="2" width="0.9" x="1088.7" y="453"></rect>
+<text x="1091.69" y="463.5"></text>
+</g>
+<g>
+<title>pfsadrc (66 samples, 0.12%)</title><rect fill="rgb(240,217,15)" height="15.0" rx="2" ry="2" width="1.4" x="1105.6" y="917"></rect>
+<text x="1108.60" y="927.5"></text>
+</g>
+<g>
+<title>_intel_fast_memcmp (6 samples, 0.01%)</title><rect fill="rgb(223,100,2)" height="15.0" rx="2" ry="2" width="0.1" x="1104.7" y="789"></rect>
+<text x="1107.67" y="799.5"></text>
+</g>
+<g>
+<title>kolrghte (9 samples, 0.02%)</title><rect fill="rgb(249,107,54)" height="15.0" rx="2" ry="2" width="0.2" x="1105.4" y="789"></rect>
+<text x="1108.41" y="799.5"></text>
+</g>
+<g>
+<title>kcbchg1 (12 samples, 0.02%)</title><rect fill="rgb(205,220,27)" height="15.0" rx="2" ry="2" width="0.2" x="1094.0" y="437"></rect>
+<text x="1096.99" y="447.5"></text>
+</g>
+<g>
+<title>kolrgrfc (30 samples, 0.05%)</title><rect fill="rgb(206,153,54)" height="15.0" rx="2" ry="2" width="0.6" x="1188.2" y="901"></rect>
+<text x="1191.20" y="911.5"></text>
+</g>
+<g>
+<title>kokasuc (21 samples, 0.04%)</title><rect fill="rgb(242,95,47)" height="15.0" rx="2" ry="2" width="0.5" x="1090.6" y="597"></rect>
+<text x="1093.64" y="607.5"></text>
+</g>
+<g>
+<title>exit_to_usermode_loop (11 samples, 0.02%)</title><rect fill="rgb(206,35,53)" height="15.0" rx="2" ry="2" width="0.3" x="1161.8" y="821"></rect>
+<text x="1164.84" y="831.5"></text>
+</g>
+<g>
+<title>kcbivbr (9 samples, 0.02%)</title><rect fill="rgb(234,156,20)" height="15.0" rx="2" ry="2" width="0.2" x="735.0" y="645"></rect>
+<text x="738.05" y="655.5"></text>
+</g>
+<g>
+<title>kghgex (68 samples, 0.12%)</title><rect fill="rgb(234,95,21)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="597"></rect>
+<text x="1091.27" y="607.5"></text>
+</g>
+<g>
+<title>kghfnd (147 samples, 0.26%)</title><rect fill="rgb(245,101,0)" height="15.0" rx="2" ry="2" width="3.1" x="1086.6" y="661"></rect>
+<text x="1089.63" y="671.5"></text>
+</g>
+<g>
+<title>dbgtTrcVaList_int (40 samples, 0.07%)</title><rect fill="rgb(238,109,36)" height="15.0" rx="2" ry="2" width="0.9" x="1088.7" y="421"></rect>
+<text x="1091.71" y="431.5"></text>
+</g>
+<g>
+<title>prepare_exit_to_usermode (41 samples, 0.07%)</title><rect fill="rgb(220,62,24)" height="15.0" rx="2" ry="2" width="0.9" x="722.2" y="629"></rect>
+<text x="725.20" y="639.5"></text>
+</g>
+<g>
+<title>__do_softirq (5 samples, 0.01%)</title><rect fill="rgb(234,72,25)" height="15.0" rx="2" ry="2" width="0.1" x="1071.0" y="693"></rect>
+<text x="1073.97" y="703.5"></text>
+</g>
+<g>
+<title>__do_page_fault (6 samples, 0.01%)</title><rect fill="rgb(235,191,2)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="293"></rect>
+<text x="1103.22" y="303.5"></text>
+</g>
+<g>
+<title>qmuhshget_internal (434 samples, 0.78%)</title><rect fill="rgb(211,95,33)" height="15.0" rx="2" ry="2" width="9.2" x="1071.4" y="757"></rect>
+<text x="1074.36" y="767.5"></text>
+</g>
+<g>
+<title>koklcopy2 (630 samples, 1.13%)</title><rect fill="rgb(251,170,13)" height="15.0" rx="2" ry="2" width="13.3" x="1089.9" y="741"></rect>
+<text x="1092.85" y="751.5"></text>
+</g>
+<g>
+<title>koklglenCbk (34 samples, 0.06%)</title><rect fill="rgb(211,209,10)" height="15.0" rx="2" ry="2" width="0.7" x="1081.0" y="757"></rect>
+<text x="1083.95" y="767.5"></text>
+</g>
+<g>
+<title>kghfrempty (18 samples, 0.03%)</title><rect fill="rgb(227,53,10)" height="15.0" rx="2" ry="2" width="0.4" x="10.4" y="1205"></rect>
+<text x="13.40" y="1215.5"></text>
+</g>
+<g>
+<title>kokacpc (7 samples, 0.01%)</title><rect fill="rgb(254,151,33)" height="15.0" rx="2" ry="2" width="0.2" x="1090.4" y="613"></rect>
+<text x="1093.45" y="623.5"></text>
+</g>
+<g>
+<title>kcbchg1 (31 samples, 0.06%)</title><rect fill="rgb(252,145,7)" height="15.0" rx="2" ry="2" width="0.7" x="735.7" y="629"></rect>
+<text x="738.74" y="639.5"></text>
+</g>
+<g>
+<title>koklc_read (72 samples, 0.13%)</title><rect fill="rgb(235,169,19)" height="15.0" rx="2" ry="2" width="1.5" x="1091.4" y="677"></rect>
+<text x="1094.38" y="687.5"></text>
+</g>
+<g>
+<title>kollfre (5 samples, 0.01%)</title><rect fill="rgb(251,51,47)" height="15.0" rx="2" ry="2" width="0.2" x="12.6" y="773"></rect>
+<text x="15.65" y="783.5"></text>
+</g>
+<g>
+<title>ktecgsc (30 samples, 0.05%)</title><rect fill="rgb(250,94,35)" height="15.0" rx="2" ry="2" width="0.6" x="737.1" y="597"></rect>
+<text x="740.06" y="607.5"></text>
+</g>
+<g>
+<title>koklread (71 samples, 0.13%)</title><rect fill="rgb(238,170,28)" height="15.0" rx="2" ry="2" width="1.5" x="1091.4" y="661"></rect>
+<text x="1094.40" y="671.5"></text>
+</g>
+<g>
+<title>kolredurHashMapCbk (44,957 samples, 80.73%)</title><rect fill="rgb(236,225,38)" height="15.0" rx="2" ry="2" width="952.7" x="11.2" y="853"></rect>
+<text x="14.21" y="863.5">kolredurHashMapCbk</text>
+</g>
+<g>
+<title>kolrgdc (13 samples, 0.02%)</title><rect fill="rgb(224,93,16)" height="15.0" rx="2" ry="2" width="0.3" x="1106.3" y="805"></rect>
+<text x="1109.28" y="815.5"></text>
+</g>
+<g>
+<title>kslwtectx (25 samples, 0.04%)</title><rect fill="rgb(214,92,29)" height="15.0" rx="2" ry="2" width="0.5" x="1100.4" y="309"></rect>
+<text x="1103.39" y="319.5"></text>
+</g>
+<g>
+<title>qerstFetch (6,606 samples, 11.86%)</title><rect fill="rgb(226,195,29)" height="15.0" rx="2" ry="2" width="140.0" x="964.1" y="933"></rect>
+<text x="967.11" y="943.5">qerstFetch</text>
+</g>
+<g>
+<title>kcbnew (40 samples, 0.07%)</title><rect fill="rgb(219,140,49)" height="15.0" rx="2" ry="2" width="0.9" x="1094.8" y="533"></rect>
+<text x="1097.81" y="543.5"></text>
+</g>
+<g>
+<title>qmuhsh_get (3,827 samples, 6.87%)</title><rect fill="rgb(251,70,1)" height="15.0" rx="2" ry="2" width="81.1" x="1107.1" y="885"></rect>
+<text x="1110.10" y="895.5">qmuhsh_get</text>
+</g>
+<g>
+<title>kole_templob_init (1,010 samples, 1.81%)</title><rect fill="rgb(218,178,39)" height="15.0" rx="2" ry="2" width="21.4" x="1081.8" y="789"></rect>
+<text x="1084.80" y="799.5">k..</text>
+</g>
+<g>
+<title>kolradc (12 samples, 0.02%)</title><rect fill="rgb(218,199,5)" height="15.0" rx="2" ry="2" width="0.3" x="1104.6" y="821"></rect>
+<text x="1107.60" y="831.5"></text>
+</g>
+<g>
+<title>kdlw_locator_op_read (15 samples, 0.03%)</title><rect fill="rgb(234,180,26)" height="15.0" rx="2" ry="2" width="0.3" x="1081.3" y="709"></rect>
+<text x="1084.25" y="719.5"></text>
+</g>
+<g>
+<title>kcblibr_int (9 samples, 0.02%)</title><rect fill="rgb(250,162,17)" height="15.0" rx="2" ry="2" width="0.2" x="735.0" y="661"></rect>
+<text x="738.05" y="671.5"></text>
+</g>
+<g>
+<title>kxstcol (5 samples, 0.01%)</title><rect fill="rgb(214,10,25)" height="15.0" rx="2" ry="2" width="0.1" x="963.9" y="997"></rect>
+<text x="966.88" y="1007.5"></text>
+</g>
+<g>
+<title>__intel_new_memset (5 samples, 0.01%)</title><rect fill="rgb(217,92,30)" height="15.0" rx="2" ry="2" width="0.1" x="1090.0" y="677"></rect>
+<text x="1093.02" y="687.5"></text>
+</g>
+<g>
+<title>kole_substr (1,056 samples, 1.90%)</title><rect fill="rgb(249,43,5)" height="15.0" rx="2" ry="2" width="22.4" x="1080.8" y="805"></rect>
+<text x="1083.83" y="815.5">k..</text>
+</g>
+<g>
+<title>smp_apic_timer_interrupt (40 samples, 0.07%)</title><rect fill="rgb(237,115,51)" height="15.0" rx="2" ry="2" width="0.8" x="949.5" y="645"></rect>
+<text x="952.49" y="655.5"></text>
+</g>
+<g>
+<title>handle_mm_fault (5 samples, 0.01%)</title><rect fill="rgb(235,60,43)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="277"></rect>
+<text x="1103.24" y="287.5"></text>
+</g>
+<g>
+<title>kgghstfel_wfp (28 samples, 0.05%)</title><rect fill="rgb(210,20,24)" height="15.0" rx="2" ry="2" width="0.6" x="1188.2" y="869"></rect>
+<text x="1191.24" y="879.5"></text>
+</g>
+<g>
+<title>kco_issue_callback (132 samples, 0.24%)</title><rect fill="rgb(221,189,42)" height="15.0" rx="2" ry="2" width="2.8" x="1095.8" y="469"></rect>
+<text x="1098.79" y="479.5"></text>
+</g>
+<g>
+<title>async_page_fault (6 samples, 0.01%)</title><rect fill="rgb(235,217,22)" height="15.0" rx="2" ry="2" width="0.1" x="1100.2" y="341"></rect>
+<text x="1103.22" y="351.5"></text>
+</g>
+<g>
+<title>kolrghte (28 samples, 0.05%)</title><rect fill="rgb(249,78,22)" height="15.0" rx="2" ry="2" width="0.6" x="1188.2" y="885"></rect>
+<text x="1191.24" y="895.5"></text>
+</g>
+<g>
+<title>kghfre (8 samples, 0.01%)</title><rect fill="rgb(209,10,34)" height="15.0" rx="2" ry="2" width="0.2" x="10.6" y="1189"></rect>
+<text x="13.61" y="1199.5"></text>
+</g>
+<g>
+<title>ksmrf_init_alloc (27 samples, 0.05%)</title><rect fill="rgb(252,155,26)" height="15.0" rx="2" ry="2" width="0.6" x="1100.3" y="341"></rect>
+<text x="1103.34" y="351.5"></text>
+</g>
+<g>
+<title>dbgtfWriteRec (37 samples, 0.07%)</title><rect fill="rgb(250,53,19)" height="15.0" rx="2" ry="2" width="0.8" x="1088.8" y="389"></rect>
+<text x="1091.77" y="399.5"></text>
+</g>
+<g>
+<title>__libc_start_main (55,631 samples, 99.90%)</title><rect fill="rgb(206,204,14)" height="15.0" rx="2" ry="2" width="1178.9" x="10.3" y="1493"></rect>
+<text x="13.34" y="1503.5">__libc_start_main</text>
+</g>
+<g>
+<title>kohfrem (17 samples, 0.03%)</title><rect fill="rgb(236,30,2)" height="15.0" rx="2" ry="2" width="0.3" x="962.9" y="725"></rect>
+<text x="965.88" y="735.5"></text>
+</g>
+<g>
+<title>kdlt_createtemp (7 samples, 0.01%)</title><rect fill="rgb(241,60,42)" height="15.0" rx="2" ry="2" width="0.1" x="1101.3" y="565"></rect>
+<text x="1104.26" y="575.5"></text>
+</g>
+<g>
+<title>qersoRowP (6,575 samples, 11.81%)</title><rect fill="rgb(245,102,48)" height="15.0" rx="2" ry="2" width="139.4" x="964.7" y="853"></rect>
+<text x="967.75" y="863.5">qersoRowP</text>
+</g>
+<g>
+<title>dbgtfdFileAccessCbk (7 samples, 0.01%)</title><rect fill="rgb(224,15,21)" height="15.0" rx="2" ry="2" width="0.1" x="1100.6" y="213"></rect>
+<text x="1103.58" y="223.5"></text>
+</g>
+<g>
+<title>rcu_report_qs_rnp (5 samples, 0.01%)</title><rect fill="rgb(221,65,43)" height="15.0" rx="2" ry="2" width="0.1" x="950.0" y="581"></rect>
+<text x="953.04" y="591.5"></text>
+</g>
+<g>
+<title>ksmarfg (66 samples, 0.12%)</title><rect fill="rgb(206,136,8)" height="15.0" rx="2" ry="2" width="1.4" x="1088.3" y="517"></rect>
+<text x="1091.27" y="527.5"></text>
+</g>
+<g>
+<title>kghssgai (164 samples, 0.29%)</title><rect fill="rgb(227,147,15)" height="15.0" rx="2" ry="2" width="3.5" x="1086.3" y="741"></rect>
+<text x="1089.29" y="751.5"></text>
+</g>
+<g>
+<title>kkxexe (55,610 samples, 99.86%)</title><rect fill="rgb(206,172,35)" height="15.0" rx="2" ry="2" width="1178.4" x="10.8" y="1285"></rect>
+<text x="13.78" y="1295.5">kkxexe</text>
+</g>
+<g>
+<title>exit_to_usermode_loop (39 samples, 0.07%)</title><rect fill="rgb(246,197,46)" height="15.0" rx="2" ry="2" width="0.9" x="722.2" y="613"></rect>
+<text x="725.25" y="623.5"></text>
+</g>
+<g>
+<title>koklwrite (279 samples, 0.50%)</title><rect fill="rgb(215,206,33)" height="15.0" rx="2" ry="2" width="5.9" x="1093.1" y="629"></rect>
+<text x="1096.12" y="639.5"></text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (14 samples, 0.03%)</title><rect fill="rgb(241,154,32)" height="15.0" rx="2" ry="2" width="0.3" x="1058.3" y="741"></rect>
+<text x="1061.30" y="751.5"></text>
+</g>
+<g>
+<title>dbgtfdFileAccessCbk (24 samples, 0.04%)</title><rect fill="rgb(229,45,15)" height="15.0" rx="2" ry="2" width="0.5" x="1088.9" y="373"></rect>
+<text x="1091.86" y="383.5"></text>
+</g>
+<g>
+<title>kghfrempty_ex (21 samples, 0.04%)</title><rect fill="rgb(225,39,6)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1253"></rect>
+<text x="13.34" y="1263.5"></text>
+</g>
+<g>
+<title>kolaslCreateCtx (174 samples, 0.31%)</title><rect fill="rgb(228,212,37)" height="15.0" rx="2" ry="2" width="3.7" x="1086.1" y="757"></rect>
+<text x="1089.08" y="767.5"></text>
+</g>
+<g>
+<title>kdlt_remove_tlob_ctl_link (10,528 samples, 18.91%)</title><rect fill="rgb(228,204,31)" height="15.0" rx="2" ry="2" width="223.1" x="738.2" y="693"></rect>
+<text x="741.20" y="703.5">kdlt_remove_tlob_ctl_link</text>
+</g>
+<g>
+<title>kokasuc (8 samples, 0.01%)</title><rect fill="rgb(242,108,22)" height="15.0" rx="2" ry="2" width="0.2" x="1092.6" y="501"></rect>
+<text x="1095.61" y="511.5"></text>
+</g>
+<g>
+<title>smbput (7 samples, 0.01%)</title><rect fill="rgb(253,116,51)" height="15.0" rx="2" ry="2" width="0.2" x="1103.9" y="837"></rect>
+<text x="1106.90" y="847.5"></text>
+</g>
+<g>
+<title>arch_local_irq_enable (8 samples, 0.01%)</title><rect fill="rgb(234,76,11)" height="15.0" rx="2" ry="2" width="0.1" x="1028.5" y="693"></rect>
+<text x="1031.47" y="703.5"></text>
+</g>
+<g>
+<title>koklNeedSurrChk (6 samples, 0.01%)</title><rect fill="rgb(217,196,52)" height="15.0" rx="2" ry="2" width="0.1" x="1098.7" y="581"></rect>
+<text x="1101.69" y="591.5"></text>
+</g>
+<g>
+<title>__write_nocancel (5 samples, 0.01%)</title><rect fill="rgb(245,176,34)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="149"></rect>
+<text x="1103.75" y="159.5"></text>
+</g>
+<g>
+<title>[unknown] (15 samples, 0.03%)</title><rect fill="rgb(231,168,39)" height="15.0" rx="2" ry="2" width="0.3" x="10.0" y="1493"></rect>
+<text x="13.02" y="1503.5"></text>
+</g>
+<g>
+<title>qersoFetchSimple (10,625 samples, 19.08%)</title><rect fill="rgb(226,169,10)" height="15.0" rx="2" ry="2" width="225.1" x="964.0" y="965"></rect>
+<text x="966.98" y="975.5">qersoFetchSimple</text>
+</g>
+<g>
+<title>ksuintract_handle_network_interrupt (21 samples, 0.04%)</title><rect fill="rgb(223,49,6)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1301"></rect>
+<text x="13.34" y="1311.5"></text>
+</g>
+<g>
+<title>__intel_ssse3_rep_memcpy (69 samples, 0.12%)</title><rect fill="rgb(249,36,12)" height="15.0" rx="2" ry="2" width="1.4" x="1095.9" y="437"></rect>
+<text x="1098.85" y="447.5"></text>
+</g>
+<g>
+<title>kghalo (144 samples, 0.26%)</title><rect fill="rgb(224,69,51)" height="15.0" rx="2" ry="2" width="3.0" x="1086.7" y="629"></rect>
+<text x="1089.70" y="639.5"></text>
+</g>
+<g>
+<title>kohalmc (9 samples, 0.02%)</title><rect fill="rgb(233,170,53)" height="15.0" rx="2" ry="2" width="0.2" x="962.4" y="677"></rect>
+<text x="965.42" y="687.5"></text>
+</g>
+<g>
+<title>apic_timer_interrupt (7 samples, 0.01%)</title><rect fill="rgb(246,145,39)" height="15.0" rx="2" ry="2" width="0.1" x="1058.2" y="741"></rect>
+<text x="1061.15" y="751.5"></text>
+</g>
+<g>
+<title>dbgtfdFileWrite (5 samples, 0.01%)</title><rect fill="rgb(252,182,43)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="181"></rect>
+<text x="1103.75" y="191.5"></text>
+</g>
+<g>
+<title>ksuintract_exec_pending (21 samples, 0.04%)</title><rect fill="rgb(230,139,41)" height="15.0" rx="2" ry="2" width="0.5" x="10.3" y="1285"></rect>
+<text x="13.34" y="1295.5"></text>
+</g>
+<g>
+<title>async_page_fault (41 samples, 0.07%)</title><rect fill="rgb(245,197,31)" height="15.0" rx="2" ry="2" width="0.9" x="1099.3" y="437"></rect>
+<text x="1102.31" y="447.5"></text>
+</g>
+<g>
+<title>dbgtfWriteRec (5 samples, 0.01%)</title><rect fill="rgb(211,150,19)" height="15.0" rx="2" ry="2" width="0.1" x="963.9" y="933"></rect>
+<text x="966.88" y="943.5"></text>
+</g>
+<g>
+<title>qertbFetch (6,606 samples, 11.86%)</title><rect fill="rgb(249,165,28)" height="15.0" rx="2" ry="2" width="140.0" x="964.1" y="917"></rect>
+<text x="967.11" y="927.5">qertbFetch</text>
+</g>
+<g>
+<title>dbgtfdFileAccessCbk (5 samples, 0.01%)</title><rect fill="rgb(217,178,34)" height="15.0" rx="2" ry="2" width="0.2" x="1100.7" y="197"></rect>
+<text x="1103.75" y="207.5"></text>
+</g>
+<g>
+<title>kolaWrite (471 samples, 0.85%)</title><rect fill="rgb(230,156,40)" height="15.0" rx="2" ry="2" width="10.0" x="1093.0" y="677"></rect>
+<text x="1095.97" y="687.5"></text>
+</g>
+<g>
+<title>kxsFreeExecutionHeap (44,968 samples, 80.75%)</title><rect fill="rgb(238,37,27)" height="15.0" rx="2" ry="2" width="952.9" x="11.0" y="981"></rect>
+<text x="13.97" y="991.5">kxsFreeExecutionHeap</text>
+</g>
+<g>
+<title>swapgs_restore_regs_and_return_to_usermode (41 samples, 0.07%)</title><rect fill="rgb(235,137,1)" height="15.0" rx="2" ry="2" width="0.9" x="722.2" y="645"></rect>
+<text x="725.20" y="655.5"></text>
+</g>
+<g>
+<title>kolasaWrite (94 samples, 0.17%)</title><rect fill="rgb(219,72,38)" height="15.0" rx="2" ry="2" width="2.0" x="1099.0" y="645"></rect>
+<text x="1102.03" y="655.5"></text>
+</g>
+<g>
+<title>kolaslCreateClob (375 samples, 0.67%)</title><rect fill="rgb(241,207,8)" height="15.0" rx="2" ry="2" width="8.0" x="1081.8" y="773"></rect>
+<text x="1084.84" y="783.5"></text>
+</g>
+</g>
+</svg>
