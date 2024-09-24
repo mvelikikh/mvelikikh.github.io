@@ -1,0 +1,6 @@
+# Distribution / packaging
+*.egg-info/
+build/
+
+# Vim swap files
+[._]*.swp
