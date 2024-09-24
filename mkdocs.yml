@@ -1,0 +1,106 @@
+---
+#copyright: it is configured dynamically via hooks
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mvelikikh
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/mvelikikh/en
+    - icon: material/email
+      link: mailto:<my-github-username>@gmail.com
+    - icon: material/rss
+      link: /rss.xml
+      name: RSS-лента заметок
+extra_css:
+  - assets/extra.css
+hooks:
+  - src/hooks.py
+markdown_extensions:
+  - admonition
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight
+  - pymdownx.snippets:
+      base_path:
+        - !relative
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+      permalink_title: Ссылка на этот заголовок
+nav:
+  - Заметки:
+      - blog/index.md
+      - tags.md
+  - tools.md
+not_in_nav: |
+  /index.md
+plugins:
+  - blog:
+      blog_toc: true
+      categories: true
+      categories_allowed:
+        - Linux
+        - Oracle
+  - rss:
+      categories:
+        - categories
+        - tags
+      date_from_meta:
+        as_creation: date.created
+      feeds_filenames:
+        rss_created: rss.xml
+      match_path: blog/posts/.*
+      use_git: false
+  - search
+  - tags:
+      tags_file: tags.md
+repo_url: https://github.com/mvelikikh/mvelikikh.github.io
+site_author: Великих М.А.
+site_description: Oracle Database и сопутствующее, что я нашёл интересным
+site_name: Путь базиста
+site_url: https://mvelikikh.github.io
+theme:
+  favicon: favicon.ico
+  features:
+    - content.action.edit
+    - content.action.view
+    - content.code.copy
+    - content.code.select
+    - header.autohide
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.integrate
+  font:
+    code: Roboto Mono
+    text: Roboto
+  language: ru
+  logo: assets/database-search.png
+  name: material
+  palette:
+    - accent: indigo
+      primary: blue grey
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Тёмная тема
+    - accent: indigo
+      primary: black
+      scheme: slate
+      toggle:
+        icon: material/brightness-7
+        name: Светлая тема
+validation:
+  absolute_links: relative_to_docs
+  anchors: warn
+  omitted_files: warn
+  unrecognized_links: warn
+watch:
+  - src

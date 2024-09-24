@@ -1,0 +1,49 @@
+---
+plugins:
+  tags:
+    # the standard tags plugin supports tags_allowed for sponsors only
+    # this particular tags_allowed lists all available tags
+    tags_allowed:
+      # any version tag means that a post uses this version. It does not mean it applies exclusively to it
+      - 9i
+      - 11g
+      - 12c:
+          description: recognize 12.1 and 12.2 as the same version
+      - 18c
+      - 19c
+      - 21c
+      - 23ai
+      - ASM
+      - Bug:
+          description: either a confirmed bug or very likely a bug
+      - Clusterware
+      - Code symbol:
+          description: Oracle code symbols, e.g. C functions, variables
+      - Data Guard
+      - Diagnostic event:
+          description: anytime set events/event is called or set
+      - EBR:
+          description: Edition-based redefinition
+      - Exadata:
+          description: Applies to Oracle Engineered Systems in general, e.g. Exadata, ODA
+      - GoldenGate
+      - Indexing
+      - Initialization parameter
+      - LOB
+      - OEM:
+          description: Oracle Enterprise Manager
+      - OERR:
+          description: Oracle errors, e.g. ORA-xxx, PRVG-xxx
+      - OPatch:
+          description: any Oracle patching including OPatch/opatchauto
+      - OS:
+          description: Operating system related
+      - PL/SQL
+      - PX:
+          description: Parallel execution
+      - Performance
+      - RAC
+      - RMAN
+      - SQL
+      - SQL*Plus
+      - X$

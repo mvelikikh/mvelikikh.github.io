@@ -1,0 +1,9 @@
+/* The width of the main blog post reading area */
+.md-grid {
+  max-width: 79rem; 
+}
+
+/* Make standard headers more visible */
+h1, h2, h3 {
+  font-weight: bold !important;
+}

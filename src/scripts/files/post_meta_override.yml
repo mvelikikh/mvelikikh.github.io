@@ -1,0 +1,513 @@
+---
+posts:
+  default:
+    categories:
+      - Oracle
+  "12c: PX Auto DOP without IO Calibration":
+    tags:
+      - 12c
+      - PX
+  "A case for DATAFILECOPY FORMAT":
+    tags:
+      - RMAN
+  "A lot of log.* files in dirbdb directory":
+    tags:
+      - GoldenGate
+  "APEX WWV_FLOW_SECURITY.GET_OWNER_OF_CALLING_CODE and 12.2":
+    tags:
+      - 12c
+      - Diagnostic event
+      - OERR
+  ? "ASM disk group fails to mount with ORA-15017 ORA-15066 errors offlining disk \"RACQ$LUN3\" in group \"DATA\" may result in a data loss"
+  : tags:
+      - 21c
+      - ASM
+      - OERR
+  "Asynchronous Global Index Maintenance and Recycle Bin":
+    tags:
+      - 12c
+      - Diagnostic event
+      - Indexing
+      - OERR
+  "Asynchronous Global Index Maintenance effects":
+    tags:
+      - 12c
+      - Indexing
+      - Performance
+  "Bitmap Conversion to Rowids with Global Indexes":
+    tags:
+      - 12c
+      - Indexing
+      - Performance
+  "Bug 4991675 - Diagnostic event improve diagnosability of data dictionary invalidation issues":
+    tags:
+      - 12c
+      - Initialization parameter
+  "Bug 15931756 - ORA-4031 Queries against SYS_FBA_TRACKEDTABLES not shared (do not use binds)":
+    tags:
+      - 11g
+      - Bug
+  "Bug 20214168 - Wrong Results using aggregations of CASE expression with fix of bug 20003240 present":
+    tags:
+      - 12c
+      - Bug
+      - Diagnostic event
+  "Bug 26588069 - Wrong Result (Duplicate Rows Produced) Using Group By After Upgrading To 12.2.0.1":
+    tags:
+      - 12c
+      - Bug
+  "Bug 30324180 SQL Macro should be backported to 19.5":
+    tags:
+      - 19c
+      - PL/SQL
+  "c3p0 PROBABLYNOT connection test query":
+    tags:
+      - Diagnostic event
+      - Performance
+  "CHA Alert CHA_DBWR_CKPT_IO_COMPLETE in OEM":
+    tags:
+      - OEM
+      - RAC
+  "Computing ORA_HASH":
+    tags:
+      - SQL
+  "Concatenation and filter subqueries oddity":
+    tags:
+      - 12c
+      - 18c
+      - 19c
+      - Performance
+  "Create Standby Skip Pluggable Database":
+    tags:
+      - 19c
+      - Data Guard
+      - RMAN
+  "Creating a Table for Exchange and Copying Indexes":
+    tags:
+      - 19c
+      - Diagnostic event
+      - Indexing
+  "Creating RAC Physical Standby for Single Instance Primary":
+    tags:
+      - 18c
+      - 19c
+      - Data Guard
+      - RAC
+  "CURSOR Expressions Return Wrong Results in 18c/19c":
+    tags:
+      - 18c
+      - 19c
+      - Bug
+  "DBMS_METADATA.GET_SXML_DDL may produce incorrect DDL for trigger in EBR environment":
+    tags:
+      - 11g
+      - 12c
+      - Bug
+      - EBR
+  "Determining Oracle Database Edition":
+    tags:
+      - 18c
+      - 19c
+      - OS
+  "Diagnosing Cluster Verification Utility (CVU) Errors":
+    tags:
+      - 19c
+      - Clusterware
+  "Direct Path Read Write Temp while Selecting CLOB from GV$ in RAC":
+    tags:
+      - 11g
+      - 12c
+      - 18c
+      - 19c
+      - Diagnostic event
+      - Performance
+      - RAC
+  "Edition-Based redefinition: adjunct schemas and stub objects":
+    tags:
+      - 11g
+      - Diagnostic event
+      - EBR
+      - OERR
+  "Edition-Based redefinition: adjunct schemas":
+    tags:
+      - 12c
+      - Diagnostic event
+      - EBR
+  "EM 12.1.0.4 Installing recommended Plug-Ins and Patches":
+    tags:
+      - OEM
+  "event 10309":
+    tags:
+      - Diagnostic event
+      - PL/SQL
+  "event 10384":
+    tags:
+      - Diagnostic event
+      - PX
+  "event 10505":
+    tags:
+      - Diagnostic event
+      - Performance
+  "Excluding DDL in IE (Integrated Extract) using DBMS_STREAMS_ADM.SET_TAG":
+    tags:
+      - GoldenGate
+  "External Tables with Tab Terminator and LRTRIM Producing Wrong Results":
+    tags:
+      - 19c
+      - Bug
+  "Finding cause of kernel: blk_update_request: I/O error, dev fd0, sector 0":
+    categories:
+      - Linux
+    tags:
+      - OS
+  "Function-Based index changed its definition after a rebuild":
+    tags:
+      - 9i
+      - 11g
+      - Bug
+      - Indexing
+  "gridSetup.sh executeConfigTools fails with PRVG-13606 : chrony daemon is not synchronized with any external time source":
+    tags:
+      - Clusterware
+      - OS
+  "How to Send Messages to AWS SQS from PL/SQL Using UTL_HTTP":
+    tags:
+      - 19c
+      - PL/SQL
+  "How to trace specific SQL statement executed by certain user":
+    tags:
+      - 21c
+      - Diagnostic event
+  "Identifying NVMe instance store volumes on Nitro-based instances":
+    tags:
+      - OS
+  "Incorrect handling of unused columns during GoldenGate initial load using Direct Bulk Load to SQL*Loader":
+    tags:
+      - 12c
+      - GoldenGate
+      - OERR
+  "Index full scan min/max scans returning wrong results on partitioned tables":
+    tags:
+      - 12c
+      - Bug
+      - Indexing
+  "Join elimination not performed in the presence of virtual columns on parent table":
+    tags:
+      - 11g
+      - Bug
+  "JPPD bypassed View has non-standard group by":
+    tags:
+      - 11g
+      - Performance
+  "Lateral views and filter predicate pushdown":
+    tags:
+      - 19c
+      - Performance
+  "Making DBMS_SCHEDULER.CREATE_JOB Transactional":
+    tags:
+      - 19c
+      - PL/SQL
+  "Mythbusters: VARRAY faster than CLOB":
+    tags:
+      - 19c
+      - LOB
+      - Performance
+  "OEM Target Version not updated after applying RU patch":
+    tags:
+      - OEM
+  "opatch and libpicl on Solaris SPARC":
+    tags:
+      - 12c
+      - OPatch
+      - OS
+  "OPATCHAUTO-72043 and JCE":
+    tags:
+      - 18c
+      - OPatch
+  "OR Expansion and Virtual Columns: Changes in 19c":
+    tags:
+      - 19c
+      - Diagnostic event
+      - Performance
+  "OR Expansion and Virtual Columns":
+    tags:
+      - 12c
+      - 18c
+      - Diagnostic event
+      - Performance
+  "ORA-600 [kglobpg_is_pkp] During Rolling RU 19.7 Apply":
+    tags:
+      - 19c
+      - OERR
+      - OPatch
+      - RAC
+  "ORA-00855 PGA_AGGREGATE_TARGET cannot be set because of insufficient physical memory":
+    tags:
+      - 19c
+      - Code symbol
+      - Initialization parameter
+  "ORA-01031 select V$RESTORE_POINT in PL/SQL":
+    tags:
+      - 12c
+      - 18c
+      - 19c
+      - Code symbol
+      - OERR
+      - PL/SQL
+  "ORA-3180 on Active Data Guard standby database":
+    tags:
+      - 12c
+      - Data Guard
+      - OERR
+  "ORA-04036 Troubleshooting: Error Stack Based Approach":
+    tags:
+      - 19c
+      - Diagnostic event
+      - OERR
+  "ORA-7445 kpdbfSourceFileSearch with NFSv3 without noac option":
+    tags:
+      - 19c
+      - OERR
+      - OS
+  "ORA-8102 on ALTER TABLE SHRINK SPACE with default column optimization":
+    tags:
+      - 11g
+      - 12c
+      - Bug
+      - Initialization parameter
+      - OERR
+  "Oracle to PostgreSQL Replication: Numbers Truncated to 6 Decimal Places":
+    tags:
+      - GoldenGate
+  "Patching Oracle Grid Infrastructure Standalone Environment Using opatchauto Out of Place (OOP) Patching":
+    tags:
+      - 19c
+      - OPatch
+  "Patching with OPatch Failed with Undefined Reference to __libc_csu_fini __libc_csu_init due to Wrong Libc Library":
+    tags:
+      - OPatch
+  "PL/SQL Create or Replace Optimization":
+    tags:
+      - 12c
+      - Code symbol
+      - Diagnostic event
+      - OERR
+      - PL/SQL
+  "Pluggable Database not Opened on all RAC Instances Following Switchover":
+    tags:
+      - 19c
+      - Data Guard
+      - OERR
+      - RAC
+  "Reading Amazon S3 Data from Oracle on non-OCI Environment":
+    tags:
+      - 19c
+      - OERR
+      - PL/SQL
+      - SQL
+  "Reclaim unused space from MLOG$ segments after MVIEW Refresh":
+    tags:
+      - 11g
+      - Diagnostic event
+      - Initialization parameter
+      - Performance
+  "Secure Use of Runtime.exec Functionality in Oracle Database":
+    tags:
+      - OS
+  "session cursor cache count statistics incorrect with parallel queries":
+    tags:
+      - 11g
+      - Bug
+      - PX
+  "Session spending its time IN_CURSOR_CLOSE":
+    tags:
+      - 12c
+      - 19c
+      - Bug
+      - Diagnostic event
+      - LOB
+      - Performance
+  "Setting database session to read only in 21c":
+    tags:
+      - 21c
+      - Initialization parameter
+      - OERR
+  "SQL92_SECURITY and ORA-01031":
+    tags:
+      - 12c
+      - Initialization parameter
+      - OERR
+      - PL/SQL
+  "SQL*Plus 12.2 and searching path of login.sql":
+    tags:
+      - 12c
+      - SQL*Plus
+  "SQL*Plus LONGCHUNKSIZE: how much is too much":
+    tags:
+      - 19c
+      - LOB
+      - Performance
+      - SQL*Plus
+  "srvctl config database OSDBA and OSOPER groups not defined ":
+    tags:
+      - 19c
+      - OS
+  "Starting Oracle Database on Demand Using Socket Activation":
+    tags:
+      - 19c
+      - OERR
+      - OS
+  "Strict Redaction Semantics":
+    tags:
+      - 19c
+      - Diagnostic event
+      - Initialization parameter
+      - OERR
+  "SU bypassed: More than 1 column in connect condition":
+    tags:
+      - 19c
+      - Bug
+      - Diagnostic event
+      - Performance
+  "Suspending a users session on specific enqueue":
+    tags:
+      - 11g
+      - Code symbol
+      - Diagnostic event
+      - X$
+  "SYS and Extended Data Types":
+    tags:
+      - 12c
+      - 18c
+      - 19c
+      - Initialization parameter
+      - LOB
+      - OERR
+  "Temporary LOBs":
+    tags:
+      - 12c
+      - Code symbol
+      - Diagnostic event
+      - LOB
+      - Performance
+  "That Old Restart Problem Strikes Back: Getting What You Pay for":
+    tags:
+      - Diagnostic event
+      - OERR
+      - Performance
+  "That Old Restart Problem Strikes Back: Setting the Stage":
+    tags:
+      - Diagnostic event
+      - Initialization parameter
+      - OERR
+      - Performance
+  "That Old Restart Problem Strikes Back: Triggers to the Rescue":
+    tags:
+      - Code symbol
+      - Diagnostic event
+      - OERR
+      - Performance
+  "Tracing Library Cache Locks Using _kgl_debug":
+    tags:
+      - Code symbol
+      - Initialization parameter
+  "Tracing SQL Macro Expansion":
+    tags:
+      - 19c
+      - Code symbol
+      - Diagnostic event
+      - OERR
+      - PL/SQL
+  "Troubleshooting Failed AutoUpgrade":
+    tags:
+      - 19c
+      - Code symbol
+      - OERR
+  "Unwrapping PL/SQL: a Systematic Approach":
+    tags:
+      - Code symbol
+      - PL/SQL
+  "Unwrapping PL/SQL: Making Use of pkwrap_reverse_table":
+    tags:
+      - Code symbol
+      - PL/SQL
+  "Unwrapping PL/SQL: Using Custom Wrap Tables":
+    tags:
+      - Code symbol
+      - PL/SQL
+  "Unwrapping PL/SQL: Wrap Tables":
+    tags:
+      - Code symbol
+      - PL/SQL
+  "Updating non Key-Preserved Table":
+    tags:
+      - 19c
+      - OERR
+  "Using credentials with database links in 21c":
+    tags:
+      - 19c
+      - 21c
+      - OERR
+  "Using LogMiner to Identify Redo Tag for Transactions":
+    tags:
+      - X$
+  "Using SEHA Features in EE":
+    tags:
+      - Clusterware
+  "Using Udev Rules with AFD on AWS Nitro Instances":
+    tags:
+      - OS
+  "v$db_pipes: Unveiling the Truth of Oracle Hash Value":
+    tags:
+      - 19c
+      - Code symbol
+  "Virtual X$ tables":
+    tags:
+      - 21c
+      - Code symbol
+      - X$
+  "V$SQL_PLAN_MONITOR.STARTS is higher than expected due to NLJ batching/Prefetching":
+    tags:
+      - 12c
+      - Initialization parameter
+  "wget one liners to download data from *.oracle.com without human intervention":
+    categories:
+      - Linux
+    tags:
+      - OS
+  "Workaround for ORA-22835: Buffer too small for CLOB to CHAR or BLOB to RAW conversion":
+    tags:
+      - Bug
+      - Diagnostic event
+      - LOB
+      - OERR
+  "X$ tables: column-level callbacks":
+    tags:
+      - 21c
+      - Code symbol
+      - X$
+  "X$ tables: reading X$KQFCO from Oracle binary":
+    tags:
+      - 21c
+      - Code symbol
+      - X$
+  "X$ tables: reading X$KQFTA from Oracle binary":
+    tags:
+      - 21c
+      - Code symbol
+      - X$
+  "X$ tables: starting address":
+    tags:
+      - 19c
+      - Code symbol
+      - X$
+  "X$ tables: table-level callbacks and column definitions (without parsing)":
+    tags:
+      - 21c
+      - Code symbol
+      - X$
+  "X$MESSAGES hidden columns":
+    tags:
+      - 19c
+      - Code symbol
+      - X$
