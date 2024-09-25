@@ -1,0 +1,15 @@
+---
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "08:00"
+  - package-ecosystem: pip
+    allow:
+      dependency-type: direct
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "08:00"
