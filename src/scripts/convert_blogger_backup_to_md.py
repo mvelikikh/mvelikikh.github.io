@@ -507,6 +507,7 @@ date:
 {% if updated %}
   updated: {{ updated }}
 {% endif %}
+description:
 {% if draft %}
 draft: true
 {% endif %}
@@ -516,7 +517,6 @@ tags:
   - {{ tag }}
 {%   endfor %}
 {% endif %}
-title: "{{ title }}"
 ---
 
 # {{ title }}

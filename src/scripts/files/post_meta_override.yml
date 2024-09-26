@@ -47,6 +47,7 @@ posts:
     tags:
       - 11g
       - Bug
+      - OERR
   "Bug 20214168 - Wrong Results using aggregations of CASE expression with fix of bug 20003240 present":
     tags:
       - 12c
