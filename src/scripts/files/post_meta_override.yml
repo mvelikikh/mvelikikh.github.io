@@ -139,6 +139,7 @@ posts:
       - OEM
   "event 10309":
     tags:
+      - 11g
       - Diagnostic event
       - PL/SQL
   "event 10384":
