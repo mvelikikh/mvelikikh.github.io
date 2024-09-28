@@ -144,6 +144,7 @@ posts:
       - PL/SQL
   "event 10384":
     tags:
+      - 11g
       - Diagnostic event
       - PX
   "event 10505":
