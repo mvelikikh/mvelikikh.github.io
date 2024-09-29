@@ -201,6 +201,7 @@ posts:
   "JPPD bypassed View has non-standard group by":
     tags:
       - 11g
+      - 12c
       - Performance
   "Lateral views and filter predicate pushdown":
     tags:
