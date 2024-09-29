@@ -25,7 +25,7 @@ def get_dates(file):
     in_frontmatter = False
     frontmatter_marker = "---"
     results = {}
-    with open(file) as fd:
+    with open(file, encoding="utf-8") as fd:
         for line in fd.readlines():
             if not in_frontmatter and line.startswith(frontmatter_marker):
                 in_frontmatter = True
