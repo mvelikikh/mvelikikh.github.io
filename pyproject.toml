@@ -14,6 +14,7 @@ classifiers = [
 dependencies = [
     "mkdocs-material ~= 9.5.34",
     "mkdocs-rss-plugin ~= 1.15.0",
+    "pymdown-extensions == 10.10.2",
 ]
 description = "Personal blog"
 readme = "README.md"
