@@ -149,6 +149,7 @@ posts:
       - PX
   "event 10505":
     tags:
+      - 11g
       - Diagnostic event
       - Performance
   "Excluding DDL in IE (Integrated Extract) using DBMS_STREAMS_ADM.SET_TAG":
