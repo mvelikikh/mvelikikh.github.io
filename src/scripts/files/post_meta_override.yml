@@ -41,6 +41,7 @@ posts:
       - Performance
   "Bug 4991675 - Diagnostic event improve diagnosability of data dictionary invalidation issues":
     tags:
+      - 11g
       - 12c
       - Initialization parameter
   "Bug 15931756 - ORA-4031 Queries against SYS_FBA_TRACKEDTABLES not shared (do not use binds)":
