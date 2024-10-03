@@ -380,6 +380,7 @@ posts:
       - 11g
       - Code symbol
       - Diagnostic event
+      - OS
       - X$
   "SYS and Extended Data Types":
     tags:
