@@ -314,6 +314,7 @@ posts:
   "Reclaim unused space from MLOG$ segments after MVIEW Refresh":
     tags:
       - 11g
+      - Code symbol
       - Diagnostic event
       - Initialization parameter
       - Performance
