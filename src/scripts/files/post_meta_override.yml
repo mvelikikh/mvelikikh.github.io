@@ -54,6 +54,7 @@ posts:
       - 12c
       - Bug
       - Diagnostic event
+      - Initialization parameter
   "Bug 26588069 - Wrong Result (Duplicate Rows Produced) Using Group By After Upgrading To 12.2.0.1":
     tags:
       - 12c
