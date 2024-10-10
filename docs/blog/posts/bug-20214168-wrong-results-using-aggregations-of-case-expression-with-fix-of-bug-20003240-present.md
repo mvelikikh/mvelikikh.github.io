@@ -242,7 +242,7 @@ From the `opatch lsinv` output, I saw that indeed the fix for bug 20214168 was a
          20879889
     ```
 
-I found that bug 21214168 is incorrectly informed as fixed whereas it is actually not: [Bug 21553476 - Wrong Results using aggregations of CASE expression with fix of bug 20003240 present in Exadata (Doc ID 21553476.8)](support.oracle.com/rs?type=doc&id=21553476.8).
+I found that bug 21214168 is incorrectly informed as fixed whereas it is actually not: [Bug 21553476 - Wrong Results using aggregations of CASE expression with fix of bug 20003240 present in Exadata (Doc ID 21553476.8)](https://support.oracle.com/rs?type=doc&id=21553476.8).
 Therefore, rather than installing patch 21214168, we should install [Patch 21553476: EXADATA X5-2 RESULTS WRONG NUMERIC CALCULATION](https://updates.oracle.com/ARULink/PatchSearch/process_form?bug=21553476).
 I was unable to reproduce the wrong results issue after installing patch 21553476!
 
