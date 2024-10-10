@@ -64,6 +64,7 @@ site_author: Великих М.А.
 site_description: Oracle Database и сопутствующее, что я нашёл интересным
 site_name: Путь базиста
 site_url: https://mvelikikh.github.io
+strict: true
 theme:
   favicon: favicon.ico
   features:
