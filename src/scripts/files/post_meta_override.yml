@@ -6,6 +6,7 @@ posts:
   "12c: PX Auto DOP without IO Calibration":
     tags:
       - 12c
+      - Initialization parameter
       - PX
   "A case for DATAFILECOPY FORMAT":
     tags:
