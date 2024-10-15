@@ -226,6 +226,7 @@ posts:
   "opatch and libpicl on Solaris SPARC":
     tags:
       - 12c
+      - OERR
       - OPatch
       - OS
   "OPATCHAUTO-72043 and JCE":
