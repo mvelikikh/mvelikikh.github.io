@@ -191,6 +191,7 @@ posts:
   "Incorrect handling of unused columns during GoldenGate initial load using Direct Bulk Load to SQL*Loader":
     tags:
       - 12c
+      - Bug
       - GoldenGate
       - OERR
   "Index full scan min/max scans returning wrong results on partitioned tables":
