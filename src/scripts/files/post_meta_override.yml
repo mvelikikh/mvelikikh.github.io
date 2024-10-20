@@ -268,6 +268,7 @@ posts:
     tags:
       - 12c
       - Data Guard
+      - Initialization parameter
       - OERR
   "ORA-04036 Troubleshooting: Error Stack Based Approach":
     tags:
