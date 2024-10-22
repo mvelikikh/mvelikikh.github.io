@@ -27,7 +27,6 @@ posts:
   "Asynchronous Global Index Maintenance and Recycle Bin":
     tags:
       - 12c
-      - Diagnostic event
       - Indexing
       - OERR
   "Asynchronous Global Index Maintenance effects":
