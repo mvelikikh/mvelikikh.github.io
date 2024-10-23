@@ -198,6 +198,7 @@ posts:
       - 12c
       - Bug
       - Indexing
+      - Initialization parameter
   "Join elimination not performed in the presence of virtual columns on parent table":
     tags:
       - 11g
