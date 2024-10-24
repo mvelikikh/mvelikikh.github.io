@@ -37,6 +37,7 @@ posts:
   "Bitmap Conversion to Rowids with Global Indexes":
     tags:
       - 12c
+      - 19c
       - Indexing
       - Performance
   "Bug 4991675 - Diagnostic event improve diagnosability of data dictionary invalidation issues":
