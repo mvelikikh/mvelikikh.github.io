@@ -339,7 +339,9 @@ posts:
       - 12c
       - 19c
       - Bug
+      - Code symbol
       - Diagnostic event
+      - Initialization parameter
       - LOB
       - Performance
   "Setting database session to read only in 21c":
