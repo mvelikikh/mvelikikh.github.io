@@ -415,6 +415,8 @@ posts:
       - Performance
   "That Old Restart Problem Strikes Back: Setting the Stage":
     tags:
+      - 12c
+      - 19c
       - Diagnostic event
       - Initialization parameter
       - OERR
