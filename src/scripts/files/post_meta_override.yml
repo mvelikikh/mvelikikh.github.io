@@ -19,6 +19,7 @@ posts:
       - 12c
       - Diagnostic event
       - OERR
+      - PL/SQL
   ? "ASM disk group fails to mount with ORA-15017 ORA-15066 errors offlining disk \"RACQ$LUN3\" in group \"DATA\" may result in a data loss"
   : tags:
       - 21c
