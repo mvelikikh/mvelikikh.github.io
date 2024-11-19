@@ -471,6 +471,7 @@ posts:
       - OERR
   "Using LogMiner to Identify Redo Tag for Transactions":
     tags:
+      - 19c
       - X$
   "Using SEHA Features in EE":
     tags:
