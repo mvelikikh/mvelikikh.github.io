@@ -329,6 +329,7 @@ posts:
       - Performance
   "Secure Use of Runtime.exec Functionality in Oracle Database":
     tags:
+      - 19c
       - OS
   "session cursor cache count statistics incorrect with parallel queries":
     tags:
