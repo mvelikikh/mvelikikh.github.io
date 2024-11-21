@@ -26,8 +26,8 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight
   - pymdownx.snippets:
-      base_path:
-        - !relative
+      base_path: !relative
+      check_paths: true
   - pymdownx.superfences
   - toc:
       permalink: true
