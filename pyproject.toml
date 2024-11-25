@@ -12,7 +12,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "mkdocs-material == 9.5.38",
+    "mkdocs-material == 9.5.45",
     "mkdocs-rss-plugin ~= 1.16.0",
 ]
 description = "Personal blog"
