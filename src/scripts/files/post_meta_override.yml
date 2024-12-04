@@ -118,6 +118,7 @@ posts:
     tags:
       - 19c
       - Clusterware
+      - OERR
   "Direct Path Read Write Temp while Selecting CLOB from GV$ in RAC":
     tags:
       - 11g
