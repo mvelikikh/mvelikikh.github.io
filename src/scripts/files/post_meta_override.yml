@@ -432,6 +432,7 @@ posts:
       - Performance
   "Tracing Library Cache Locks Using _kgl_debug":
     tags:
+      - 19c
       - Code symbol
       - Initialization parameter
   "Tracing SQL Macro Expansion":
