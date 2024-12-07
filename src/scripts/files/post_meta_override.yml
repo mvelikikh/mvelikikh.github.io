@@ -71,6 +71,7 @@ posts:
       - Performance
   "CHA Alert CHA_DBWR_CKPT_IO_COMPLETE in OEM":
     tags:
+      - Clusterware
       - OEM
       - RAC
   "Computing ORA_HASH":
