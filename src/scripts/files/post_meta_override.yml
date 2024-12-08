@@ -87,6 +87,7 @@ posts:
     tags:
       - 19c
       - Data Guard
+      - Initialization parameter
       - RMAN
   "Creating a Table for Exchange and Copying Indexes":
     tags:
