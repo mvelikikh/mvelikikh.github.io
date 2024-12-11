@@ -128,6 +128,7 @@ posts:
       - 18c
       - 19c
       - Diagnostic event
+      - LOB
       - Performance
       - RAC
   "Edition-Based redefinition: adjunct schemas and stub objects":
