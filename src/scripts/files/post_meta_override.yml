@@ -507,6 +507,7 @@ posts:
       - OS
   "Workaround for ORA-22835: Buffer too small for CLOB to CHAR or BLOB to RAW conversion":
     tags:
+      - 19c
       - Bug
       - Diagnostic event
       - LOB
