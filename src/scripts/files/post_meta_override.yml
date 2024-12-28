@@ -263,6 +263,7 @@ posts:
       - 19c
       - Code symbol
       - Initialization parameter
+      - OERR
   "ORA-01031 select V$RESTORE_POINT in PL/SQL":
     tags:
       - 12c
