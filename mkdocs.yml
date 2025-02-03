@@ -58,7 +58,50 @@ plugins:
       use_git: false
   - search
   - tags:
-      tags_file: tags.md
+      tags_allowed:
+        # any version tag means that a post uses this version. It does not mean it applies exclusively to it
+        - 9i
+        - 11g
+        # recognize 12.1 and 12.2 as the same version
+        - 12c
+        - 18c
+        - 19c
+        - 21c
+        - 23ai
+        - ASM
+        # either a confirmed bug or very likely a bug
+        - Bug
+        - Clusterware
+        # Oracle code symbols, e.g. C functions, variables
+        - Code symbol
+        - Data Guard
+        # anytime set events/event is called or set
+        - Diagnostic event
+        # Edition-based redefinition
+        - EBR
+        # Applies to Oracle Engineered Systems in general, e.g. Exadata, ODA
+        - Exadata
+        - GoldenGate
+        - Indexing
+        - Initialization parameter
+        - LOB
+        # Oracle Enterprise Manager
+        - OEM
+        # Oracle errors, e.g. ORA-xxx, PRVG-xxx
+        - OERR
+        # any Oracle patching including OPatch/opatchauto
+        - OPatch
+        # Operating system related
+        - OS
+        - PL/SQL
+        # Parallel execution
+        - PX
+        - Performance
+        - RAC
+        - RMAN
+        - SQL
+        - SQL*Plus
+        - X$
 repo_url: https://github.com/mvelikikh/mvelikikh.github.io
 site_author: Великих М.А.
 site_description: Oracle Database и сопутствующее, что я нашёл интересным

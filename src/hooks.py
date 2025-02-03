@@ -4,27 +4,12 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-import yaml
 from mkdocs.exceptions import ConfigurationError
-
-ALLOWED_TAGS = set()
 
 
 def on_config(config, **kwargs):
     """Call on build."""
     config.copyright = f"&copy; 2014-{datetime.now().year} Великих М.А."
-    _load_user_config()
-
-
-def _load_user_config():
-    global ALLOWED_TAGS
-    user_config_file = Path(__file__).parents[0] / "config" / "config.yml"
-    with open(user_config_file, "r") as stream:
-        user_config = yaml.load(stream, Loader=yaml.FullLoader)
-        tags = user_config["plugins"]["tags"]["tags_allowed"]
-        ALLOWED_TAGS = set(
-            next(iter(tag.keys())) if isinstance(tag, dict) else tag for tag in tags
-        )
 
 
 def _is_blog_post(page):
@@ -104,8 +89,6 @@ def _validate_tags(page, tags):
             raise ConfigurationError("Empty tag list for a blog post")
 
     tags_set = set(tags)
-    if not tags_set.issubset(ALLOWED_TAGS):
-        raise ConfigurationError(f"Non-allowed tags found: {tags_set - ALLOWED_TAGS}")
 
     if len(tags_set) != len(tags):
         duplicates = [item for item, count in Counter(tags).items() if count > 1]
