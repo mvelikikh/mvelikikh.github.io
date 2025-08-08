@@ -1,0 +1,68 @@
+[oracle@myhostname ~]$ sqlplus /nolog @ksdtevt
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Fri Aug 8 11:21:19 2025
+Version 19.27.0.0.0
+
+Copyright (c) 1982, 2024, Oracle.  All rights reserved.
+
+SQL> conn / as sysdba
+Connected.
+SQL> alter session set container=pdb;
+
+Session altered.
+
+SQL>
+SQL> alter session set events 'no_such_table errorstack(1)';
+
+Session altered.
+
+SQL> oradebug setmypid
+Statement processed.
+SQL> oradebug eventdump session
+no_such_table errorstack(1)
+SQL> select * from no_such_table1;
+select * from no_such_table1
+              *
+ERROR at line 1:
+ORA-00942: table or view does not exist
+
+
+SQL> !tail -50 ~/alert_orcl.log
+...
+2025-08-08T11:21:19.057941+00:00
+PDB(3):Errors in file /u01/app/oracle/diag/rdbms/orcl/orcl/trace/orcl_ora_15218.trc:
+2025-08-08T11:21:19.130451+00:00
+PDB(3):Errors in file /u01/app/oracle/diag/rdbms/orcl/orcl/trace/orcl_ora_15218.trc:
+ORA-00942: table or view does not exist
+
+SQL>
+SQL> exec dbms_session.sleep(10)
+
+PL/SQL procedure successfully completed.
+
+SQL>
+SQL> alter session set events 'cannot_insert_null incident("NULL_INSERTION")';
+
+Session altered.
+
+SQL> oradebug eventdump session
+cannot_insert_null incident("NULL_INSERTION")
+no_such_table errorstack(1)
+SQL> create table t(n int not null);
+
+Table created.
+
+SQL> insert into t values (null);
+insert into t values (null)
+                      *
+ERROR at line 1:
+ORA-01400: cannot insert NULL into ("SYS"."T"."N")
+
+
+SQL> !tail -50 ~/alert_orcl.log
+...
+2025-08-08T11:21:29.266197+00:00
+Errors in file /u01/app/oracle/diag/rdbms/orcl/orcl/trace/orcl_ora_15218.trc  (incident=48974) (PDBNAME=PDB):
+ORA-00700: soft internal error, arguments: [EVENT_CREATED_INCIDENT], [1400], [NULL_INSERTION], [], [], [], [], [], [], [], [], []
+ORA-01400: cannot insert NULL into ("SYS"."T"."N")
+PDB(3):Incident details in: /u01/app/oracle/diag/rdbms/orcl/orcl/incident/incdir_48974/orcl_ora_15218_i48974.trc
