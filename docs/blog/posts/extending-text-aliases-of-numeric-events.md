@@ -152,7 +152,7 @@ make -f ins_rdbms.mk ioracle
 
 Его вывод:
 
-``` title="Вывод работы скрипта с изменённым ksdtevt"
+```sql title="Вывод работы скрипта с изменённым ksdtevt"
 --8<-- "extending-text-aliases-of-numeric-events/output.txt"
 ```
 
