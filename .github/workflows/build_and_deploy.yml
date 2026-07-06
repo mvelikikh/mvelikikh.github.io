@@ -29,3 +29,7 @@ jobs:
           path: site
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v5
+        env:
+          # actions/deploy-pages@v5 still bundles @actions/artifact@2.x, which loads
+          # Node's deprecated punycode module. See actions/deploy-pages#413.
+          NODE_OPTIONS: --disable-warning=DEP0040
