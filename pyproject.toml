@@ -13,7 +13,7 @@ classifiers = [
 ]
 dependencies = [
     "mkdocs-material == 9.7.6",
-    "mkdocs-rss-plugin ~= 1.18.1",
+    "mkdocs-rss-plugin ~= 1.19.0",
 ]
 description = "Personal blog"
 readme = "README.md"
